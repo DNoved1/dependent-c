@@ -1,0 +1,4 @@
+* Unicode
+* Handle allocation failure. Will likely delay this until compiler is
+  bootstrapped, as polymorphism will make returning Maybe(T) values a lot
+  easier, among other things.

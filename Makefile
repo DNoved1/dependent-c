@@ -1,5 +1,5 @@
 OBJECTS = $(addprefix bin/, \
-	main.o )
+	main.o lex.o )
 
 CFLAGS = -g -O0 -Wall -Iinclude
 
