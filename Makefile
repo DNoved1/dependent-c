@@ -1,6 +1,9 @@
 OBJECTS = $(addprefix bin/, \
 	lex.o )
 
+TEST_OBJECTS = $(addprefix bin/test/, \
+	lex.o )
+
 CFLAGS = -g -O0 -Wall -Iinclude
 
 all: bin bin/dependent-c
@@ -24,7 +27,7 @@ clean:
 test: bin/test bin/test-dependent-c
 	./bin/test-dependent-c
 
-bin/test-dependent-c: bin/test/main.o $(OBJECTS)
+bin/test-dependent-c: bin/test/main.o $(TEST_OBJECTS) $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^
 
 bin/test/%.o: test/%.c
