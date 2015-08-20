@@ -36,6 +36,14 @@ int token_print(Token token) {
             return printf("SYMBOL(LPAREN)");
           case TOK_SYM_RPAREN:
             return printf("SYMBOL(RPAREN)");
+          case TOK_SYM_LSQUARE:
+            return printf("SYMBOL(LSQUARE)");
+          case TOK_SYM_RSQUARE:
+            return printf("SYMBOL(RSQUARE)");
+          case TOK_SYM_LBRACE:
+            return printf("SYMBOL(LBRACE)");
+          case TOK_SYM_RBRACE:
+            return printf("SYMBOL(RBRACE)");
         }
       case TOK_EOF:
         return printf("EOF()");

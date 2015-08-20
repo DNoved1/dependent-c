@@ -203,6 +203,18 @@ start_of_function:
     } else if (c == ')') {
         token.tag = TOK_SYMBOL;
         token.data.symbol = TOK_SYM_RPAREN;
+    } else if (c == '[') {
+        token.tag = TOK_SYMBOL;
+        token.data.symbol = TOK_SYM_LSQUARE;
+    } else if (c == ']') {
+        token.tag = TOK_SYMBOL;
+        token.data.symbol = TOK_SYM_RSQUARE;
+    } else if (c == '{') {
+        token.tag = TOK_SYMBOL;
+        token.data.symbol = TOK_SYM_LBRACE;
+    } else if (c == '}') {
+        token.tag = TOK_SYMBOL;
+        token.data.symbol = TOK_SYM_RBRACE;
     } else if (c == EOF) {
         token.tag = TOK_EOF;
     } else {

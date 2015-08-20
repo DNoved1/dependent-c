@@ -15,8 +15,9 @@ typedef enum {
 } TokenReserved;
 
 typedef enum {
-      TOK_SYM_LPAREN
-    , TOK_SYM_RPAREN
+      TOK_SYM_LPAREN,   TOK_SYM_RPAREN      // ( )
+    , TOK_SYM_LSQUARE,  TOK_SYM_RSQUARE     // [ ]
+    , TOK_SYM_LBRACE,   TOK_SYM_RBRACE      // { }
 } TokenSymbol;
 
 typedef struct {

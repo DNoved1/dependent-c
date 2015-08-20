@@ -1,10 +1,10 @@
 OBJECTS = $(addprefix bin/, \
-	lex.o )
+	lex.o expr.o statement.o)
 
 TEST_OBJECTS = $(addprefix bin/test/, \
 	lex.o )
 
-CFLAGS = -g -O0 -Wall -Iinclude
+CFLAGS = -g -O0 -std=c99 -pedantic -Wall -Iinclude
 
 all: bin bin/dependent-c
 
