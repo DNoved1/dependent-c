@@ -1,12 +1,12 @@
+#=== Shared Definitions =======================================================
 OBJECTS = $(addprefix bin/, \
-	lex.o expr.o statement.o)
-
-TEST_OBJECTS = $(addprefix bin/test/, \
-	lex.o )
+	lex.o grammar/dependent-c.y.o \
+	expr.o statement.o )
 
 CFLAGS = -g -O0 -std=c99 -pedantic -Wall -Iinclude
 
-all: bin bin/dependent-c
+#=== Building the Compiler ====================================================
+all: bin bin/grammar bin/dependent-c
 
 bin/dependent-c: bin/main.o $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^
@@ -15,14 +15,27 @@ bin/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 .PHONY: bin
-
 bin:
 	mkdir -p $@
 
-.PHONY: clean
+bin/grammar/%.o: bin/grammar/%.c
+	$(CC) $(CFLAGS) -c -o $@ $^
 
+bin/grammar/dependent-c.y.c: grammar/dependent-c.y
+	bison -o $@ $^
+
+.PHONY: bin/grammar
+bin/grammar:
+	mkdir -p $@
+
+#=== Cleaning =================================================================
+.PHONY: clean
 clean:
-	rm -r bin
+	rm -rf bin
+
+#=== Testing ==================================================================
+TEST_OBJECTS = $(addprefix bin/test/, \
+	lex.o )
 
 test: bin/test bin/test-dependent-c
 	./bin/test-dependent-c

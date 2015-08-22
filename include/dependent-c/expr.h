@@ -32,19 +32,22 @@ typedef enum {
 
     // Function type and destructor. Constructor is a declaration, not an
     // expression.
-    , EXPR_FUNC_TYPE    // type int_filter = bool(int arg);
-    , EXPR_CALL         // ((int_filter)foo)(42);
+    , EXPR_FUNC_TYPE    // Expr '(' { Expr | Expr Ident }(',')
+    , EXPR_CALL         // Expr '(' { Expr }(',') ')'
 
     // Product/Union type, constructor, and destructor.
-    , EXPR_STRUCT       // type pair_t = struct { int fst; char snd; }
-    , EXPR_UNION        // type either_t = union { int fst; char snd; }
-    , EXPR_PACK         // pair_t pair = (pair){.fst = 1, .snd = 2}
-    , EXPR_MEMBER       // char snd = pair.snd;
+    , EXPR_STRUCT       // 'struct' '{' { Expr Ident ';' }() '}'
+    , EXPR_UNION        // 'union' '{' { Expr Ident ';' }() '}'
+    , EXPR_PACK         // '(' Expr ')' '{' { '.' Ident '=' Expr }(',') '}'
+    , EXPR_MEMBER       // Expr '.' Ident
 
     // Pointer type, constructor, and destructor.
-    , EXPR_POINTER
-    , EXPR_REFERENCE
-    , EXPR_DEREFERENCE
+    , EXPR_POINTER      // Expr '*'
+    , EXPR_REFERENCE    // '&' Expr
+    , EXPR_DEREFERENCE  // '*' Expr
+
+    // Ambiguous nodes
+    , EXPR_FUNC_TYPE_OR_CALL
 } ExprTag;
 
 typedef struct Expr Expr;
@@ -90,6 +93,12 @@ struct Expr {
         Expr *pointer;
         Expr *reference;
         Expr *dereference;
+
+        struct {
+            Expr *ret_type_or_func;
+            size_t num_params_or_args;
+            Expr *param_types_or_args;
+        } func_type_or_call;
     } data;
 };
 
