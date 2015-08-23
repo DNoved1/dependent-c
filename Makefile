@@ -1,7 +1,7 @@
 #=== Shared Definitions =======================================================
 OBJECTS = $(addprefix bin/, \
 	lex.o grammar/dependent-c.y.o \
-	ast.o statement.o )
+	ast.o )
 
 CFLAGS = -g -O0 -std=c99 -pedantic -Wall -Werror -Iinclude
 BISONFLAGS = -Wall -Werror

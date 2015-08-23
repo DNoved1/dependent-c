@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/***** Literals **************************************************************/
 typedef enum {
     // The type of types
       LIT_TYPE
@@ -25,6 +26,7 @@ typedef struct {
     } data;
 } Literal;
 
+/***** Expressions ***********************************************************/
 typedef enum {
     // Misc.
       EXPR_LITERAL      // type, u8, s64, 42, etc
@@ -103,7 +105,34 @@ struct Expr {
     } data;
 };
 
+/***** Statements ************************************************************/
+typedef enum {
+      STATEMENT_BLOCK
+    , STATEMENT_DECL
+} StatementTag;
+
+typedef struct Statement Statement;
+struct Statement {
+    StatementTag tag;
+    union {
+        struct {
+            size_t num_statements;
+            Statement *statements;
+        } block;
+
+        struct {
+            Expr *type;
+            char *name;
+            bool is_initialized;
+            Expr *initial_value;
+        } decl;
+    } data;
+};
+
 /* Free any resources associated with an expression. */
 void expr_free(Expr expr);
+
+/* Free any resources associated with an expression. */
+void statement_free(Statement statement);
 
 #endif /* DEPENDENT_C_AST */
