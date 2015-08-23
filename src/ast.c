@@ -358,7 +358,7 @@ void top_level_pprint(TopLevel top_level) {
 
             expr_pprint(0, top_level.data.func.param_types[i]);
             if (top_level.data.func.param_names[i] != NULL) {
-                fputs(top_level.data.func.param_names[i], stdout);
+                printf(" %s", top_level.data.func.param_names[i]);
             }
         }
         printf(") {\n");
