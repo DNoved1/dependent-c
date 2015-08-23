@@ -2,3 +2,4 @@
 * Handle allocation failure. Will likely delay this until compiler is
   bootstrapped, as polymorphism will make returning Maybe(T) values a lot
   easier, among other things.
+* Dependent types rather than simply system f-omega.
