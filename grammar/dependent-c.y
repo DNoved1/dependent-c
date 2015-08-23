@@ -1,5 +1,6 @@
 %{
 #include <ctype.h>  /* isspace, isalpha, isalnum, isdigit */
+#include <stdbool.h> /* true, false */
 #include <stdint.h> /* unint64_t */
 #include <stdlib.h> /* malloc, realloc, free */
 #include <string.h> /* strcmp */
@@ -10,6 +11,7 @@
 
 %define api.pure full
 %param {TokenStream *stream}
+%parse-param {TranslationUnit *result}
 %locations
 
 %union {
@@ -18,8 +20,11 @@
     char *ident;
 
     /* Parser values */
-    Expr expr;
     Literal literal;
+    Expr expr;
+    Statement statement;
+    TopLevel top_level;
+    TranslationUnit unit;
 
     struct {
         size_t len;
@@ -50,11 +55,17 @@
         char *field_name;
         Expr assign;
     } pack_init;
+
+    struct {
+        size_t len;
+        Statement *statements;
+    } statement_list;
 }
 
 %{
 int yylex(YYSTYPE *lval, YYLTYPE *lloc, TokenStream *stream);
-void yyerror(YYLTYPE *lloc, TokenStream *stream, const char *error_message);
+void yyerror(YYLTYPE *lloc, TokenStream *stream,
+    TranslationUnit *result, const char *error_message);
 %}
 
     /* Reserved Words / Multicharacter symbols */
@@ -78,8 +89,11 @@ void yyerror(YYLTYPE *lloc, TokenStream *stream, const char *error_message);
 %token <ident> TOK_IDENT
 
     /* Result types of each rule */
-%type <expr> simple_expr postfix_expr prefix_expr expr
 %type <literal> literal
+%type <expr> simple_expr postfix_expr prefix_expr expr
+%type <statement> statement
+%type <top_level> top_level
+%type <unit> translation_unit
 
 %type <type_ident_list> type_ident_list
 %type <type_ident> type_ident
@@ -90,7 +104,28 @@ void yyerror(YYLTYPE *lloc, TokenStream *stream, const char *error_message);
 %type <pack_init_list> pack_init_list pack_init_list_
 %type <pack_init> pack_init
 
+%type <statement_list> statement_list block
+
 %%
+
+main:
+      translation_unit {
+        *result = $1; }
+    ;
+
+literal:
+      "type"        { $$.tag = LIT_TYPE;                                      }
+    | "void"        { $$.tag = LIT_VOID;                                      }
+    | "u8"          { $$.tag = LIT_U8;                                        }
+    | "s8"          { $$.tag = LIT_S8;                                        }
+    | "u16"         { $$.tag = LIT_U16;                                       }
+    | "s16"         { $$.tag = LIT_S16;                                       }
+    | "u32"         { $$.tag = LIT_U32;                                       }
+    | "s32"         { $$.tag = LIT_S32;                                       }
+    | "u64"         { $$.tag = LIT_U64;                                       }
+    | "s64"         { $$.tag = LIT_S64;                                       }
+    | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.data.integral = $1;           }
+    ;
 
 simple_expr:
       '(' expr ')'  {
@@ -156,18 +191,53 @@ expr:
       prefix_expr
     ;
 
-literal:
-      "type"        { $$.tag = LIT_TYPE;                                      }
-    | "void"        { $$.tag = LIT_VOID;                                      }
-    | "u8"          { $$.tag = LIT_U8;                                        }
-    | "s8"          { $$.tag = LIT_S8;                                        }
-    | "u16"         { $$.tag = LIT_U16;                                       }
-    | "s16"         { $$.tag = LIT_S16;                                       }
-    | "u32"         { $$.tag = LIT_U32;                                       }
-    | "s32"         { $$.tag = LIT_S32;                                       }
-    | "u64"         { $$.tag = LIT_U64;                                       }
-    | "s64"         { $$.tag = LIT_S64;                                       }
-    | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.data.integral = $1;           }
+statement:
+      ';' {
+        $$.tag = STATEMENT_EMPTY; }
+    | expr ';' {
+        $$.tag = STATEMENT_EXPR;
+        $$.data.expr = $1; }
+    | block {
+        $$.tag = STATEMENT_BLOCK;
+        $$.data.block.num_statements = $1.len;
+        $$.data.block.statements = $1.statements; }
+    | expr TOK_IDENT ';' {
+        $$.tag = STATEMENT_DECL;
+        $$.data.decl.type = $1;
+        $$.data.decl.name = $2;
+        $$.data.decl.is_initialized = false; }
+    | expr TOK_IDENT '=' expr ';' {
+        $$.tag = STATEMENT_DECL;
+        $$.data.decl.type = $1;
+        $$.data.decl.name = $2;
+        $$.data.decl.is_initialized = true;
+        $$.data.decl.initial_value = $4; }
+    ;
+
+top_level:
+    /* TODO: note that param_list allows non-named params, which we don't
+             want here. */
+      expr TOK_IDENT '(' param_list ')' block {
+        $$.tag = TOP_LEVEL_FUNC;
+        $$.data.func.ret_type = $1;
+        $$.data.func.name = $2;
+        $$.data.func.num_params = $4.len;
+        $$.data.func.param_types = $4.types;
+        $$.data.func.param_names = $4.names;
+        $$.data.func.num_statements = $6.len;
+        $$.data.func.statements = $6.statements; }
+    ;
+
+translation_unit:
+      %empty {
+        $$.num_top_levels = 0;
+        $$.top_levels = NULL; }
+    | translation_unit top_level {
+        $$ = $1;
+        $$.top_levels = realloc($$.top_levels,
+            ($$.num_top_levels + 1) * sizeof *$$.top_levels);
+        $$.top_levels[$$.num_top_levels] = $2;
+        $$.num_top_levels += 1; }
     ;
 
 type_ident_list:
@@ -247,6 +317,23 @@ pack_init:
       '.' TOK_IDENT '=' expr {
         $$.field_name = $2;
         $$.assign = $4; }
+    ;
+
+block:
+      '{' statement_list '}' {
+        $$ = $2; }
+    ;
+
+statement_list:
+      %empty {
+        $$.len = 0;
+        $$.statements = NULL; }
+    | statement_list statement {
+        $$ = $1;
+        $$.statements = realloc($$.statements,
+            ($$.len + 1) * sizeof *$$.statements);
+        $$.statements[$$.len] = $2;
+        $$.len += 1; }
     ;
 
 %%
@@ -377,7 +464,8 @@ start_of_function:
     }
 }
 
-void yyerror(YYLTYPE *lloc, TokenStream *stream, const char *error_message) {
+void yyerror(YYLTYPE *lloc, TokenStream *stream,
+        TranslationUnit *result, const char *error_message) {
     fprintf(stdout, "Parser error at line %d, column %d: %s\n",
         lloc->first_line, lloc->first_column, error_message);
 }

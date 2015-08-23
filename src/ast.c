@@ -98,6 +98,13 @@ void expr_free(Expr expr) {
 
 void statement_free(Statement statement) {
     switch (statement.tag) {
+      case STATEMENT_EMPTY:
+        break;
+
+      case STATEMENT_EXPR:
+        expr_free(statement.data.expr);
+        break;
+
       case STATEMENT_BLOCK:
         for (size_t i = 0; i < statement.data.block.num_statements; i++) {
             statement_free(statement.data.block.statements[i]);
@@ -106,12 +113,37 @@ void statement_free(Statement statement) {
         break;
 
       case STATEMENT_DECL:
-        expr_free(*statement.data.decl.type);
-        free(statement.data.decl.type);
+        expr_free(statement.data.decl.type);
         free(statement.data.decl.name);
         if (statement.data.decl.is_initialized) {
-            free(statement.data.decl.initial_value);
+            expr_free(statement.data.decl.initial_value);
         }
         break;
     }
+}
+
+void top_level_free(TopLevel top_level) {
+    switch (top_level.tag) {
+      case TOP_LEVEL_FUNC:
+        expr_free(top_level.data.func.ret_type);
+        free(top_level.data.func.name);
+        for (size_t i = 0; i < top_level.data.func.num_params; i++) {
+            expr_free(top_level.data.func.param_types[i]);
+            free(top_level.data.func.param_names[i]);
+        }
+        free(top_level.data.func.param_types);
+        free(top_level.data.func.param_names);
+        for (size_t i = 0; i < top_level.data.func.num_statements; i++) {
+            statement_free(top_level.data.func.statements[i]);
+        }
+        free(top_level.data.func.statements);
+        break;
+    }
+}
+
+void translation_unit_free(TranslationUnit unit) {
+    for (size_t i = 0; i < unit.num_top_levels; i++) {
+        top_level_free(unit.top_levels[i]);
+    }
+    free(unit.top_levels);
 }

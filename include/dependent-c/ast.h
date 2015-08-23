@@ -107,7 +107,9 @@ struct Expr {
 
 /***** Statements ************************************************************/
 typedef enum {
-      STATEMENT_BLOCK
+      STATEMENT_EMPTY
+    , STATEMENT_EXPR
+    , STATEMENT_BLOCK
     , STATEMENT_DECL
 } StatementTag;
 
@@ -115,24 +117,57 @@ typedef struct Statement Statement;
 struct Statement {
     StatementTag tag;
     union {
+        Expr expr;
+
         struct {
             size_t num_statements;
             Statement *statements;
         } block;
 
         struct {
-            Expr *type;
+            Expr type;
             char *name;
             bool is_initialized;
-            Expr *initial_value;
+            Expr initial_value;
         } decl;
     } data;
 };
+
+/***** Top-Level Definitions *************************************************/
+typedef enum {
+      TOP_LEVEL_FUNC
+} TopLevelTag;
+
+typedef struct {
+    TopLevelTag tag;
+    union {
+        struct {
+            Expr ret_type;
+            char *name;
+            size_t num_params;
+            Expr *param_types;
+            char **param_names;
+            size_t num_statements;
+            Statement *statements;
+        } func;
+    } data;
+} TopLevel;
+
+typedef struct {
+    size_t num_top_levels;
+    TopLevel *top_levels;
+} TranslationUnit;
 
 /* Free any resources associated with an expression. */
 void expr_free(Expr expr);
 
 /* Free any resources associated with an expression. */
 void statement_free(Statement statement);
+
+/* Free any resources associated with a top level definition. */
+void top_level_free(TopLevel top_level);
+
+/* Free any resources associated with a translation unit. */
+void translation_unit_free(TranslationUnit unit);
 
 #endif /* DEPENDENT_C_AST */
