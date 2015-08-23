@@ -160,14 +160,18 @@ typedef struct {
 
 /* Free any resources associated with an expression. */
 void expr_free(Expr expr);
+void expr_pprint(int nesting, Expr expr);
 
 /* Free any resources associated with an expression. */
 void statement_free(Statement statement);
+void statement_pprint(int nesting, Statement statement);
 
 /* Free any resources associated with a top level definition. */
 void top_level_free(TopLevel top_level);
+void top_level_pprint(TopLevel top_level);
 
 /* Free any resources associated with a translation unit. */
 void translation_unit_free(TranslationUnit unit);
+void translation_unit_pprint(TranslationUnit unit);
 
 #endif /* DEPENDENT_C_AST */
