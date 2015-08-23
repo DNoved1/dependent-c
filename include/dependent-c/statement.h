@@ -1,7 +1,7 @@
 #ifndef DEPENDENT_C_STATEMENT
 #define DEPENDENT_C_STATEMENT
 
-#include "dependent-c/expr.h"
+#include "dependent-c/ast.h"
 
 typedef enum {
       STATEMENT_BLOCK

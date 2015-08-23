@@ -5,7 +5,7 @@
 #include <string.h> /* strcmp */
 
 #include "dependent-c/lex.h"
-#include "dependent-c/expr.h"
+#include "dependent-c/ast.h"
 %}
 
 %define api.pure full

@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "dependent-c/expr.h"
+#include "dependent-c/ast.h"
 
 void expr_free(Expr expr) {
     switch (expr.tag) {

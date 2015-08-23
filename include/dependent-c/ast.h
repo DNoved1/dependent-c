@@ -1,5 +1,5 @@
-#ifndef DEPENDENT_C_EXPR
-#define DEPENDENT_C_EXPR
+#ifndef DEPENDENT_C_AST
+#define DEPENDENT_C_AST
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -106,4 +106,4 @@ struct Expr {
 /* Free any resources associated with an expression. */
 void expr_free(Expr expr);
 
-#endif /* DEPENDENT_C_EXPR */
+#endif /* DEPENDENT_C_AST */

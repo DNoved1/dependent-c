@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#include "dependent-c/expr.h"
+#include "dependent-c/ast.h"
 #include "dependent-c/statement.h"
 
 void statement_free(Statement statement) {
