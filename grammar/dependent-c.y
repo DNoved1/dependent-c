@@ -1,7 +1,7 @@
 %{
 #include <ctype.h>  /* isspace, isalpha, isalnum, isdigit */
 #include <stdint.h> /* unint64_t */
-#include <stdlib.h> /* realloc */
+#include <stdlib.h> /* malloc, realloc, free */
 #include <string.h> /* strcmp */
 
 #include "dependent-c/lex.h"
@@ -20,6 +20,36 @@
     /* Parser values */
     Expr expr;
     Literal literal;
+
+    struct {
+        size_t len;
+        Expr *types;
+        char **idents;
+    } type_ident_list;
+    struct {
+        Expr type;
+        char *ident;
+    } type_ident;
+
+    struct {
+        size_t len;
+        Expr *types;
+        char **names; /* Vales may be null if not named */
+    } param_list;
+    struct {
+        Expr type;
+        char *name; /* May be null if not named */
+    } param;
+
+    struct {
+        size_t len;
+        char **field_names;
+        Expr *assigns;
+    } pack_init_list;
+    struct {
+        char *field_name;
+        Expr assign;
+    } pack_init;
 }
 
 %{
@@ -27,25 +57,19 @@ int yylex(YYSTYPE *lval, YYLTYPE *lloc, TokenStream *stream);
 void yyerror(YYLTYPE *lloc, TokenStream *stream, const char *error_message);
 %}
 
-    /* Reserved Words */
+    /* Reserved Words / Multicharacter symbols */
 %token TOK_TYPE     "type"
 %token TOK_VOID     "void"
 %token TOK_U8       "u8"
 %token TOK_S8       "s8"
-%token TOK_U16      TOK_S16
-%token TOK_U32      TOK_S32
-%token TOK_U64      TOK_S64
+%token TOK_U16      "u16"
+%token TOK_S16      "s16"
+%token TOK_U32      "u32"
+%token TOK_S32      "s32"
+%token TOK_U64      "u64"
+%token TOK_S64      "s64"
 %token TOK_STRUCT   "struct"
 %token TOK_UNION    "union"
-
-    /* Symbols */
-%token TOK_LPAREN   TOK_RPAREN
-%token TOK_LSQUARE  TOK_RSQUARE
-%token TOK_LBRACE   TOK_RBRACE
-%token TOK_SEMICOLON
-%token TOK_FULLSTOP
-%token TOK_ASTERISK
-%token TOK_AMPERSAND
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -54,16 +78,82 @@ void yyerror(YYLTYPE *lloc, TokenStream *stream, const char *error_message);
 %token <ident> TOK_IDENT
 
     /* Result types of each rule */
-%type <expr> expr
+%type <expr> simple_expr postfix_expr prefix_expr expr
 %type <literal> literal
+
+%type <type_ident_list> type_ident_list
+%type <type_ident> type_ident
+
+%type <param_list> param_list param_list_
+%type <param> param
+
+%type <pack_init_list> pack_init_list pack_init_list_
+%type <pack_init> pack_init
 
 %%
 
+simple_expr:
+      '(' expr ')'  {
+        $$ = $2; }
+    | literal {
+        $$.tag = EXPR_LITERAL;
+        $$.data.literal = $1; }
+    | TOK_IDENT {
+        $$.tag = EXPR_IDENT;
+        $$.data.ident = $1; }
+    | "struct" '{' type_ident_list '}' {
+        $$.tag = EXPR_STRUCT;
+        $$.data.struct_.num_fields = $3.len;
+        $$.data.struct_.field_types = $3.types;
+        $$.data.struct_.field_names = $3.idents; }
+    | "union" '{' type_ident_list '}' {
+        $$.tag = EXPR_UNION;
+        $$.data.union_.num_fields = $3.len;
+        $$.data.union_.field_types = $3.types;
+        $$.data.union_.field_names = $3.idents; }
+    ;
+
+postfix_expr:
+      simple_expr
+    | postfix_expr '*' {
+        $$.tag = EXPR_POINTER;
+        $$.data.pointer = malloc(sizeof $1);
+        *$$.data.pointer = $1; }
+    | postfix_expr '.' TOK_IDENT {
+        $$.tag = EXPR_MEMBER;
+        $$.data.member.record = malloc(sizeof $1);
+        *$$.data.member.record = $1;
+        $$.data.member.field = $3; }
+    | postfix_expr '(' param_list ')' {
+        $$.tag = EXPR_FUNC_TYPE_OR_CALL;
+        $$.data.func_type_or_call.ret_type_or_func = malloc(sizeof $1);
+        *$$.data.func_type_or_call.ret_type_or_func = $1;
+        $$.data.func_type_or_call.num_params_or_args = $3.len;
+        $$.data.func_type_or_call.param_types_or_args = $3.types;
+        $$.data.func_type_or_call.param_names = $3.names; }
+    | '(' expr ')' '{' pack_init_list '}' {
+        $$.tag = EXPR_PACK;
+        $$.data.pack.type = malloc(sizeof $2);
+        *$$.data.pack.type = $2;
+        $$.data.pack.num_assigns = $5.len;
+        $$.data.pack.field_names = $5.field_names;
+        $$.data.pack.assigns = $5.assigns; }
+    ;
+
+prefix_expr:
+      postfix_expr
+    | '&' expr {
+        $$.tag = EXPR_REFERENCE;
+        $$.data.reference = malloc(sizeof $2);
+        *$$.data.reference = $2; }
+    | '*' expr {
+        $$.tag = EXPR_DEREFERENCE;
+        $$.data.dereference = malloc(sizeof $2);
+        *$$.data.dereference = $2; }
+    ;
+
 expr:
-      literal       { $$.tag = EXPR_LITERAL; $$.data.literal = $1;            }
-    | TOK_IDENT     { $$.tag = EXPR_IDENT;   $$.data.ident = $1;              }
-    | struct_type   { $$.tag = EXPR_STRUCT;                                   }
-    | union_type    { $$.tag = EXPR_UNION;                                    }
+      prefix_expr
     ;
 
 literal:
@@ -71,24 +161,93 @@ literal:
     | "void"        { $$.tag = LIT_VOID;                                      }
     | "u8"          { $$.tag = LIT_U8;                                        }
     | "s8"          { $$.tag = LIT_S8;                                        }
-    | TOK_U16       { $$.tag = LIT_U16;                                       }
-    | TOK_S16       { $$.tag = LIT_S16;                                       }
-    | TOK_U32       { $$.tag = LIT_U32;                                       }
-    | TOK_S32       { $$.tag = LIT_S32;                                       }
-    | TOK_U64       { $$.tag = LIT_U64;                                       }
-    | TOK_S64       { $$.tag = LIT_S64;                                       }
+    | "u16"         { $$.tag = LIT_U16;                                       }
+    | "s16"         { $$.tag = LIT_S16;                                       }
+    | "u32"         { $$.tag = LIT_U32;                                       }
+    | "s32"         { $$.tag = LIT_S32;                                       }
+    | "u64"         { $$.tag = LIT_U64;                                       }
+    | "s64"         { $$.tag = LIT_S64;                                       }
     | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.data.integral = $1;           }
     ;
 
-struct_type: "struct" struct_or_union_body;
-union_type:  "union"  struct_or_union_body;
+type_ident_list:
+      %empty {
+        $$.len = 0;
+        $$.types = NULL;
+        $$.idents = NULL; }
+    | type_ident_list type_ident {
+        $$ = $1;
+        $$.types = realloc($$.types, ($$.len + 1) * sizeof *$$.types);
+        $$.types[$$.len] = $2.type;
+        $$.idents = realloc($$.types, ($$.len + 1) * sizeof *$$.idents);
+        $$.idents[$$.len] = $2.ident;
+        $$.len += 1; }
+    ;
+type_ident:
+    expr TOK_IDENT ';' {
+        $$.type = $1;
+        $$.ident = $2;
+    };
 
-struct_or_union_body:
-    TOK_LBRACE type_ident_decls TOK_RBRACE;
-type_ident_decls:
-    | type_ident_decls type_ident_decl;
-type_ident_decl:
-    expr TOK_IDENT TOK_SEMICOLON;
+param_list:
+      %empty {
+        $$.len = 0;
+        $$.types = NULL;
+        $$.names = NULL; }
+    | param_list_
+    ;
+param_list_:
+      param  {
+        $$.len = 1;
+        $$.types = malloc(sizeof *$$.types);
+        $$.types[0] = $1.type;
+        $$.names = malloc(sizeof *$$.names);
+        $$.names[0] = $1.name; }
+    | param_list_ ',' param {
+        $$ = $1;
+        $$.types = realloc($$.types, ($$.len + 1) * sizeof *$$.types);
+        $$.types[$$.len] = $3.type;
+        $$.names = realloc($$.names, ($$.len + 1) * sizeof *$$.names);
+        $$.names[$$.len] = $3.name;
+        $$.len += 1; }
+    ;
+param:
+      expr {
+        $$.type = $1;
+        $$.name = NULL; }
+    | expr TOK_IDENT {
+        $$.type = $1;
+        $$.name = $2; }
+    ;
+
+pack_init_list:
+      %empty {
+        $$.len = 0;
+        $$.field_names = NULL;
+        $$.assigns = NULL; }
+    | pack_init_list_
+    ;
+pack_init_list_:
+      pack_init {
+        $$.len = 1;
+        $$.field_names = malloc(sizeof *$$.field_names);
+        $$.field_names[0] = $1.field_name;
+        $$.assigns = malloc(sizeof *$$.assigns);
+        $$.assigns[0] = $1.assign; }
+    | pack_init_list_ ',' pack_init {
+        $$ = $1;
+        $$.field_names = realloc($$.field_names,
+            ($$.len + 1) * sizeof *$$.field_names);
+        $$.field_names[$$.len] = $3.field_name;
+        $$.assigns = realloc($$.assigns, ($$.len + 1) * sizeof *$$.assigns);
+        $$.assigns[$$.len] = $3.assign;
+        $$.len += 1; }
+    ;
+pack_init:
+      '.' TOK_IDENT '=' expr {
+        $$.field_name = $2;
+        $$.assign = $4; }
+    ;
 
 %%
 
@@ -203,7 +362,8 @@ start_of_function:
             || c == ';'
             || c == '.'
             || c == '*'
-            || c == '&') {
+            || c == '&'
+            || c == '=') {
         return c;
     } else if (c == EOF) {
         return 0;

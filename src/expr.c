@@ -17,12 +17,9 @@ void expr_free(Expr expr) {
         free(expr.data.func_type.ret_type);
         for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
             expr_free(expr.data.func_type.param_types[i]);
-            if (expr.data.func_type.param_named[i]) {
-                free(expr.data.func_type.param_names[i]);
-            }
+            free(expr.data.func_type.param_names[i]);
         }
         free(expr.data.func_type.param_types);
-        free(expr.data.func_type.param_named);
         free(expr.data.func_type.param_names);
         break;
 
@@ -54,6 +51,8 @@ void expr_free(Expr expr) {
         break;
 
       case EXPR_PACK:
+        expr_free(*expr.data.pack.type);
+        free(expr.data.pack.type);
         for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
             free(expr.data.pack.field_names[i]);
             expr_free(expr.data.pack.assigns[i]);
@@ -81,6 +80,18 @@ void expr_free(Expr expr) {
       case EXPR_DEREFERENCE:
         expr_free(*expr.data.dereference);
         free(expr.data.dereference);
+        break;
+
+      case EXPR_FUNC_TYPE_OR_CALL:
+        expr_free(*expr.data.func_type_or_call.ret_type_or_func);
+        free(expr.data.func_type_or_call.ret_type_or_func);
+        for (size_t i = 0; i < expr.data.func_type_or_call.num_params_or_args;
+                i++) {
+            expr_free(expr.data.func_type_or_call.param_types_or_args[i]);
+            free(expr.data.func_type_or_call.param_names[i]);
+        }
+        free(expr.data.func_type_or_call.param_types_or_args);
+        free(expr.data.func_type_or_call.param_names);
         break;
     }
 }

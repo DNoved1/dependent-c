@@ -3,7 +3,8 @@ OBJECTS = $(addprefix bin/, \
 	lex.o grammar/dependent-c.y.o \
 	expr.o statement.o )
 
-CFLAGS = -g -O0 -std=c99 -pedantic -Wall -Iinclude
+CFLAGS = -g -O0 -std=c99 -pedantic -Wall -Werror -Iinclude
+BISONFLAGS = -Wall -Werror
 
 #=== Building the Compiler ====================================================
 all: bin bin/grammar bin/dependent-c
@@ -22,7 +23,7 @@ bin/grammar/%.o: bin/grammar/%.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 bin/grammar/dependent-c.y.c: grammar/dependent-c.y
-	bison -o $@ $^
+	bison $(BISONFLAGS) -o $@ $^
 
 .PHONY: bin/grammar
 bin/grammar:

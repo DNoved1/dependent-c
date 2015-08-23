@@ -32,7 +32,7 @@ typedef enum {
 
     // Function type and destructor. Constructor is a declaration, not an
     // expression.
-    , EXPR_FUNC_TYPE    // Expr '(' { Expr | Expr Ident }(',')
+    , EXPR_FUNC_TYPE    // Expr '(' { Expr | Expr Ident }(',') ')'
     , EXPR_CALL         // Expr '(' { Expr }(',') ')'
 
     // Product/Union type, constructor, and destructor.
@@ -61,8 +61,7 @@ struct Expr {
             Expr *ret_type;
             size_t num_params;
             Expr *param_types;
-            bool *param_named;
-            char **param_names;
+            char **param_names; // Values may be NULL if params not named.
         } func_type;
         struct {
             Expr *func;
@@ -81,6 +80,7 @@ struct Expr {
             char **field_names;
         } union_;
         struct {
+            Expr *type;
             size_t num_assigns;
             char **field_names;
             Expr *assigns;
@@ -98,6 +98,7 @@ struct Expr {
             Expr *ret_type_or_func;
             size_t num_params_or_args;
             Expr *param_types_or_args;
+            char **param_names;
         } func_type_or_call;
     } data;
 };
