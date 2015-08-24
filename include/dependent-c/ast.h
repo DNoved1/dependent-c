@@ -162,6 +162,14 @@ typedef struct {
 void expr_free(Expr expr);
 void expr_pprint(int nesting, Expr expr);
 
+/* Determine if two expressions are exactly equivalent. Does not take into
+ * account alpha equivalence.
+ */
+bool expr_equal(Expr x, Expr y);
+
+/* Make a deep copy of an expression. */
+Expr expr_copy(Expr x);
+
 /* Free any resources associated with an expression. */
 void statement_free(Statement statement);
 void statement_pprint(int nesting, Statement statement);

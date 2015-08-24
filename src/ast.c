@@ -5,6 +5,287 @@
 
 #include "dependent-c/ast.h"
 
+/***** Expression Management *************************************************/
+static bool literal_equal(Literal x, Literal y) {
+    if (x.tag != y.tag) {
+        return false;
+    }
+
+    switch (x.tag) {
+      case LIT_TYPE:
+      case LIT_VOID:
+      case LIT_U8:
+      case LIT_S8:
+      case LIT_U16:
+      case LIT_S16:
+      case LIT_U32:
+      case LIT_S32:
+      case LIT_U64:
+      case LIT_S64:
+        return true;
+
+      case LIT_INTEGRAL:
+        return x.data.integral == y.data.integral;
+    }
+}
+
+bool expr_equal(Expr x, Expr y) {
+    if (x.tag != y.tag) {
+        return false;
+    }
+
+    switch (x.tag) {
+      case EXPR_LITERAL:
+        return literal_equal(x.data.literal, y.data.literal);
+
+      case EXPR_IDENT:
+        return x.data.ident == y.data.ident;
+
+      case EXPR_FUNC_TYPE:
+        if (!expr_equal(*x.data.func_type.ret_type, *y.data.func_type.ret_type)
+                || x.data.func_type.num_params != y.data.func_type.num_params) {
+            return false;
+        }
+        for (size_t i = 0; i < x.data.func_type.num_params; i++) {
+            if (!expr_equal(x.data.func_type.param_types[i],
+                        y.data.func_type.param_types[i])
+                    || x.data.func_type.param_names[i]
+                        != y.data.func_type.param_names[i]) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_CALL:
+        if (!expr_equal(*x.data.call.func, *y.data.call.func)
+                || x.data.call.num_args != y.data.call.num_args) {
+            return false;
+        }
+        for (size_t i = 0; i < x.data.call.num_args; i++) {
+            if (!expr_equal(x.data.call.args[i], y.data.call.args[i])) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_STRUCT:
+        if (x.data.struct_.num_fields != y.data.struct_.num_fields) {
+            return false;
+        }
+        for (size_t i = 0; i < x.data.struct_.num_fields; i++) {
+            if (!expr_equal(x.data.struct_.field_types[i],
+                        y.data.struct_.field_types[i])
+                    || x.data.struct_.field_names[i]
+                        != y.data.struct_.field_names[i]) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_UNION:
+        if (x.data.union_.num_fields != y.data.union_.num_fields) {
+            return false;
+        }
+        for (size_t i = 0; i < x.data.union_.num_fields; i++) {
+            if (!expr_equal(x.data.union_.field_types[i],
+                        y.data.union_.field_types[i])
+                    || x.data.union_.field_names[i]
+                        != y.data.union_.field_names[i]) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_PACK:
+        if (!expr_equal(*x.data.pack.type, *y.data.pack.type)
+                || x.data.pack.num_assigns != y.data.pack.num_assigns) {
+            return false;
+        }
+        for (size_t i = 0; i < x.data.pack.num_assigns; i++) {
+            if (x.data.pack.field_names[i] != y.data.pack.field_names[i]
+                    || !expr_equal(x.data.pack.assigns[i],
+                        y.data.pack.assigns[i])) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_MEMBER:
+        if (!expr_equal(*x.data.member.record, *y.data.member.record)
+                || x.data.member.field != y.data.member.field) {
+            return false;
+        }
+        return true;
+
+      case EXPR_POINTER:
+        return expr_equal(*x.data.pointer, *y.data.pointer);
+
+      case EXPR_REFERENCE:
+        return expr_equal(*x.data.reference, *y.data.reference);
+
+      case EXPR_DEREFERENCE:
+        return expr_equal(*x.data.dereference, *y.data.dereference);
+
+      case EXPR_FUNC_TYPE_OR_CALL:
+        if (!expr_equal(*x.data.func_type_or_call.ret_type_or_func,
+                    *y.data.func_type_or_call.ret_type_or_func)
+                || x.data.func_type_or_call.num_params_or_args !=
+                    y.data.func_type_or_call.num_params_or_args) {
+            return false;
+        }
+        for (size_t i = 0; i < x.data.func_type_or_call.num_params_or_args;
+                i++) {
+            if (!expr_equal(x.data.func_type_or_call.param_types_or_args[i],
+                        y.data.func_type_or_call.param_types_or_args[i])
+                    || x.data.func_type_or_call.param_names[i] !=
+                        y.data.func_type_or_call.param_names[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+static Literal literal_copy(Literal x) {
+    switch (x.tag) {
+      case LIT_TYPE:
+      case LIT_VOID:
+      case LIT_U8:
+      case LIT_S8:
+      case LIT_U16:
+      case LIT_S16:
+      case LIT_U32:
+      case LIT_S32:
+      case LIT_U64:
+      case LIT_S64:
+      case LIT_INTEGRAL:
+        return x;
+    }
+}
+
+Expr expr_copy(Expr x) {
+    Expr y = {.tag = x.tag};
+
+    switch (x.tag) {
+      case EXPR_LITERAL:
+        y.data.literal = literal_copy(x.data.literal);
+        break;
+
+      case EXPR_IDENT:
+        y.data.ident = x.data.ident;
+        break;
+
+      case EXPR_FUNC_TYPE:
+        y.data.func_type.ret_type = malloc(sizeof *y.data.func_type.ret_type);
+        *y.data.func_type.ret_type = expr_copy(*x.data.func_type.ret_type);
+        y.data.func_type.num_params = x.data.func_type.num_params;
+        y.data.func_type.param_types = calloc(
+            sizeof *y.data.func_type.param_types, y.data.func_type.num_params);
+        y.data.func_type.param_names = calloc(
+            sizeof *y.data.func_type.param_names, y.data.func_type.num_params);
+        for (size_t i = 0; i < y.data.func_type.num_params; i++) {
+            y.data.func_type.param_types[i] =
+                expr_copy(x.data.func_type.param_types[i]);
+            y.data.func_type.param_names[i] = x.data.func_type.param_names[i];
+        }
+        break;
+
+      case EXPR_CALL:
+        y.data.call.func = malloc(sizeof *y.data.call.func);
+        *y.data.call.func = expr_copy(*x.data.call.func);
+        y.data.call.num_args = x.data.call.num_args;
+        y.data.call.args = calloc(sizeof *y.data.call.args,
+            y.data.call.num_args);
+        for (size_t i = 0; i < y.data.call.num_args; i++) {
+            y.data.call.args[i] = expr_copy(x.data.call.args[i]);
+        }
+        break;
+
+      case EXPR_STRUCT:
+        y.data.struct_.num_fields = x.data.struct_.num_fields;
+        y.data.struct_.field_types = calloc(sizeof *y.data.struct_.field_types,
+            y.data.struct_.num_fields);
+        y.data.struct_.field_names = calloc(sizeof *y.data.struct_.field_names,
+            y.data.struct_.num_fields);
+        for (size_t i = 0; i < y.data.struct_.num_fields; i++) {
+            y.data.struct_.field_types[i] =
+                expr_copy(x.data.struct_.field_types[i]);
+            y.data.struct_.field_names[i] = x.data.struct_.field_names[i];
+        }
+        break;
+
+      case EXPR_UNION:
+        y.data.union_.num_fields = x.data.union_.num_fields;
+        y.data.union_.field_types = calloc(sizeof *y.data.union_.field_types,
+            y.data.union_.num_fields);
+        y.data.union_.field_names = calloc(sizeof *y.data.union_.field_names,
+            y.data.union_.num_fields);
+        for (size_t i = 0; i < y.data.union_.num_fields; i++) {
+            y.data.union_.field_types[i] =
+                expr_copy(x.data.union_.field_types[i]);
+            y.data.union_.field_names[i] = x.data.union_.field_names[i];
+        }
+        break;
+
+      case EXPR_PACK:
+        y.data.pack.type = malloc(sizeof *y.data.pack.type);
+        *y.data.pack.type = expr_copy(*x.data.pack.type);
+        y.data.pack.num_assigns = x.data.pack.num_assigns;
+        y.data.pack.field_names = calloc(sizeof *y.data.pack.field_names,
+            y.data.pack.num_assigns);
+        y.data.pack.assigns = calloc(sizeof *y.data.pack.assigns,
+            y.data.pack.num_assigns);
+        for (size_t i = 0; i < y.data.pack.num_assigns; i++) {
+            y.data.pack.field_names[i] = x.data.pack.field_names[i];
+            y.data.pack.assigns[i] = expr_copy(x.data.pack.assigns[i]);
+        }
+        break;
+
+      case EXPR_MEMBER:
+        y.data.member.record = malloc(sizeof *y.data.member.record);
+        *y.data.member.record = expr_copy(*x.data.member.record);
+        y.data.member.field = x.data.member.field;
+        break;
+
+      case EXPR_POINTER:
+        y.data.pointer = malloc(sizeof *y.data.pointer);
+        *y.data.pointer = expr_copy(*x.data.pointer);
+        break;
+
+      case EXPR_REFERENCE:
+        y.data.reference = malloc(sizeof *y.data.reference);
+        *y.data.reference = expr_copy(*x.data.reference);
+        break;
+
+      case EXPR_DEREFERENCE:
+        y.data.dereference = malloc(sizeof *y.data.dereference);
+        *y.data.dereference = expr_copy(*x.data.dereference);
+        break;
+
+      case EXPR_FUNC_TYPE_OR_CALL:
+        y.data.func_type_or_call.ret_type_or_func = malloc(
+            sizeof *y.data.func_type_or_call.ret_type_or_func);
+        *y.data.func_type_or_call.ret_type_or_func = expr_copy(
+            *x.data.func_type_or_call.ret_type_or_func);
+        size_t len =
+            y.data.func_type_or_call.num_params_or_args =
+            x.data.func_type_or_call.num_params_or_args;
+        y.data.func_type_or_call.param_types_or_args = calloc(
+            sizeof *y.data.func_type_or_call.param_types_or_args, len);
+        y.data.func_type_or_call.param_names = calloc(
+            sizeof *y.data.func_type_or_call.param_names, len);
+        for (size_t i = 0; i < len; i++) {
+            y.data.func_type_or_call.param_types_or_args[i] =
+                expr_copy(x.data.func_type_or_call.param_types_or_args[i]);
+            y.data.func_type_or_call.param_names[i] =
+                x.data.func_type_or_call.param_names[i];
+        }
+        break;
+    }
+
+    return y;
+}
+
 /***** Freeing ast nodes *****************************************************/
 void expr_free(Expr expr) {
     switch (expr.tag) {
