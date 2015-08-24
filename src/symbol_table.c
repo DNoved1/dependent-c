@@ -5,6 +5,98 @@
 #include "dependent-c/ast.h"
 #include "dependent-c/symbol_table.h"
 
+/***** Symbol Interning ******************************************************/
+static size_t size_t_min(size_t x, size_t y) {
+    return x < y ? x : y;
+}
+
+// Using the first few characters as the hash here since most symbols tend to
+// be short. Might be worthwhile changing later since many other symbols will
+// be longer with the same prefix, as exhibited by the code here.
+static uint64_t symbol_hash(const char *str) {
+    uint64_t result = 0;
+    memcpy(&result, str, size_t_min(strlen(str), sizeof(uint64_t)));
+    return result;
+}
+
+static void symbol_resize_if_needed(InternedSymbols *interns) {
+    if ((interns->len + 1) * 2 >= interns->cap) {
+        size_t old_cap = interns->cap;
+        struct InternedSymbolsTable *old_symbols = interns->symbols;
+
+        size_t new_cap = old_cap * 2 + 1;
+        struct InternedSymbolsTable *new_symbols = calloc(new_cap,
+            sizeof *new_symbols);
+
+        for (size_t i = 0; i < old_cap; i++) {
+            if (old_symbols[i].symbol != NULL) {
+                size_t index = old_symbols[i].hash % new_cap;
+
+                while (true) {
+                    if (new_symbols[index].symbol == NULL) {
+                        new_symbols[index] = old_symbols[i];
+                        break;
+                    } else {
+                        index = (index + 1) % new_cap;
+                    }
+                }
+            }
+        }
+
+        interns->cap = new_cap;
+        interns->symbols = new_symbols;
+
+        memset(old_symbols, 0, old_cap * sizeof *old_symbols);
+        free(old_symbols);
+    }
+}
+
+InternedSymbols symbol_new(void) {
+    return (InternedSymbols){
+          .len = 0
+        , .cap = 0
+        , .symbols = NULL
+    };
+}
+
+void symbol_free_all(InternedSymbols *interns) {
+    for (size_t i = 0; i < interns->cap; i++) {
+        if (interns->symbols[i].symbol != NULL) {
+            free(interns->symbols[i].symbol);
+            memset(&interns->symbols[i], 0, sizeof interns->symbols[i]);
+        }
+    }
+
+    free(interns->symbols);
+    memset(interns, 0, sizeof *interns);
+}
+
+
+const char *symbol_intern(InternedSymbols *interns, const char *str) {
+    symbol_resize_if_needed(interns);
+
+    uint64_t hash = symbol_hash(str);
+    size_t index = hash % interns->cap;
+
+    while (true) {
+        if (interns->symbols[index].symbol == NULL) {
+            char *str_copy = malloc(strlen(str) + 1);
+            strcpy(str_copy, str);
+
+            interns->symbols[index].hash = hash;
+            interns->symbols[index].symbol = str_copy;
+            interns->len += 1;
+            return interns->symbols[index].symbol;
+        } else if (hash == interns->symbols[index].hash
+                && strcmp(str, interns->symbols[index].symbol) == 0) {
+            return interns->symbols[index].symbol;
+        } else {
+            index = (index + 1) % interns->cap;
+        }
+    }
+}
+
+/***** Symbol Table **********************************************************/
 SymbolTable symbol_table_new(void) {
     return (SymbolTable){
           .num_globals = 0

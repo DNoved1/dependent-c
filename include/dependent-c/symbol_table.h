@@ -5,6 +5,23 @@
 
 #include "dependent-c/ast.h"
 
+/***** Symbol Interning ******************************************************/
+
+typedef struct {
+    size_t len;
+    size_t cap;
+    struct InternedSymbolsTable {
+        uint64_t hash;
+        char *symbol; // Is NULL if the spot is unoccupied
+    } *symbols;
+} InternedSymbols;
+
+InternedSymbols symbol_new(void);
+void symbol_free_all(InternedSymbols *interns);
+
+const char *symbol_intern(InternedSymbols *interns, const char *str);
+
+/***** Symbol Table (aka map from Symbol -> Type) ****************************/
 typedef struct {
     size_t num_globals;
     char **global_names;
