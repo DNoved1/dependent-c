@@ -7,17 +7,17 @@
 
 #include "dependent-c/lex.h"
 #include "dependent-c/ast.h"
+#include "dependent-c/general.h"
 %}
 
 %define api.pure full
-%param {TokenStream *stream}
-%parse-param {TranslationUnit *result}
+%param {Context *context}
 %locations
 
 %union {
     /* Lexer values */
     uint64_t integral;
-    char *ident;
+    const char *ident;
 
     /* Parser values */
     Literal literal;
@@ -29,30 +29,30 @@
     struct {
         size_t len;
         Expr *types;
-        char **idents;
+        const char **idents;
     } type_ident_list;
     struct {
         Expr type;
-        char *ident;
+        const char *ident;
     } type_ident;
 
     struct {
         size_t len;
         Expr *types;
-        char **names; /* Vales may be null if not named */
+        const char **names; /* Vales may be null if not named */
     } param_list;
     struct {
         Expr type;
-        char *name; /* May be null if not named */
+        const char *name; /* May be null if not named */
     } param;
 
     struct {
         size_t len;
-        char **field_names;
+        const char **field_names;
         Expr *assigns;
     } pack_init_list;
     struct {
-        char *field_name;
+        const char *field_name;
         Expr assign;
     } pack_init;
 
@@ -63,9 +63,8 @@
 }
 
 %{
-int yylex(YYSTYPE *lval, YYLTYPE *lloc, TokenStream *stream);
-void yyerror(YYLTYPE *lloc, TokenStream *stream,
-    TranslationUnit *result, const char *error_message);
+int yylex(YYSTYPE *lval, YYLTYPE *lloc, Context *context);
+void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %}
 
     /* Reserved Words / Multicharacter symbols */
@@ -110,7 +109,7 @@ void yyerror(YYLTYPE *lloc, TokenStream *stream,
 
 main:
       translation_unit {
-        *result = $1; }
+        context->ast = $1; }
     ;
 
 literal:
@@ -372,8 +371,9 @@ static void skip_whitespace(TokenStream *stream) {
     }
 }
 
-int yylex(YYSTYPE *lval, YYLTYPE *lloc, TokenStream *stream) {
-start_of_function:
+int yylex(YYSTYPE *lval, YYLTYPE *lloc, Context *context) {
+start_of_function:;
+    TokenStream *stream = &context->tokens;
     skip_whitespace(stream);
 
     lloc->first_line = stream->line;
@@ -421,7 +421,8 @@ start_of_function:
         check_is_reserved(struct,   TOK_STRUCT)
         check_is_reserved(union,    TOK_UNION)
         else {
-            lval->ident = ident;
+            const char *interned_ident = symbol_intern(&context->interns, ident);
+            lval->ident = interned_ident;
             return TOK_IDENT;
         }
 
@@ -465,8 +466,7 @@ start_of_function:
     }
 }
 
-void yyerror(YYLTYPE *lloc, TokenStream *stream,
-        TranslationUnit *result, const char *error_message) {
+void yyerror(YYLTYPE *lloc, Context *context, const char *error_message) {
     fprintf(stdout, "Parser error at line %d, column %d: %s\n",
         lloc->first_line, lloc->first_column, error_message);
 }

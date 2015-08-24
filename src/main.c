@@ -2,22 +2,21 @@
 
 #include "dependent-c/lex.h"
 #include "dependent-c/ast.h"
+#include "dependent-c/general.h"
 
-int yyparse(TokenStream*, TranslationUnit*);
+int yyparse(Context *);
 
 int main(void) {
-    TokenStream stream = token_stream_new(file_to_char_stream(stdin));
-    TranslationUnit unit;
+    Context context = context_new("<stdin>", file_to_char_stream(stdin));
     int ret_value = EXIT_SUCCESS;
 
-    if (yyparse(&stream, &unit) == 0) {
-        translation_unit_pprint(unit);
-        translation_unit_free(unit);
+    if (yyparse(&context) == 0) {
+        translation_unit_pprint(context.ast);
     } else {
         ret_value = EXIT_FAILURE;
     }
 
-    token_stream_free(&stream);
+    context_free(&context);
 
     return ret_value;
 }

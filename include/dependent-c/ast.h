@@ -57,13 +57,13 @@ struct Expr {
     ExprTag tag;
     union {
         Literal literal;
-        char *ident;
+        const char *ident;
 
         struct {
             Expr *ret_type;
             size_t num_params;
             Expr *param_types;
-            char **param_names; // Values may be NULL if params not named.
+            const char **param_names; // Values may be NULL if params not named.
         } func_type;
         struct {
             Expr *func;
@@ -74,22 +74,22 @@ struct Expr {
         struct {
             size_t num_fields;
             Expr *field_types;
-            char **field_names;
+            const char **field_names;
         } struct_;
         struct {
             size_t num_fields;
             Expr *field_types;
-            char **field_names;
+            const char **field_names;
         } union_;
         struct {
             Expr *type;
             size_t num_assigns;
-            char **field_names;
+            const char **field_names;
             Expr *assigns;
         } pack;
         struct {
             Expr *record;
-            char *field;
+            const char *field;
         } member;
 
         Expr *pointer;
@@ -100,7 +100,7 @@ struct Expr {
             Expr *ret_type_or_func;
             size_t num_params_or_args;
             Expr *param_types_or_args;
-            char **param_names;
+            const char **param_names;
         } func_type_or_call;
     } data;
 };
@@ -126,7 +126,7 @@ struct Statement {
 
         struct {
             Expr type;
-            char *name;
+            const char *name;
             bool is_initialized;
             Expr initial_value;
         } decl;
@@ -143,10 +143,10 @@ typedef struct {
     union {
         struct {
             Expr ret_type;
-            char *name;
+            const char *name;
             size_t num_params;
             Expr *param_types;
-            char **param_names;
+            const char **param_names;
             size_t num_statements;
             Statement *statements;
         } func;
