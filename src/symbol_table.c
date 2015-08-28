@@ -140,7 +140,7 @@ void symbol_table_leave_scope(SymbolTable *symbols) {
 }
 
 bool symbol_table_register_global(SymbolTable *symbols,
-        char *name, Expr type) {
+        const char *name, Expr type) {
     for (size_t i = 0; i < symbols->num_globals; i++) {
         if (strcmp(name, symbols->global_names[i]) == 0) {
             return false;
@@ -159,7 +159,7 @@ bool symbol_table_register_global(SymbolTable *symbols,
 }
 
 bool symbol_table_register_local(SymbolTable *symbols,
-        char *name, Expr type) {
+        const char *name, Expr type) {
     assert(symbols->locals_stack_size > 0);
 
     size_t index = symbols->locals_stack_size - 1;
@@ -182,4 +182,27 @@ bool symbol_table_register_local(SymbolTable *symbols,
 
     symbols->locals_stack[index].num_locals = num_locals + 1;
     return true;
+}
+
+bool symbol_table_lookup(SymbolTable *symbols,
+        const char *name, Expr *result) {
+    for (size_t i_ = 0; i_ < symbols->locals_stack_size; i_++) {
+        size_t i = symbols->locals_stack_size - i_ - 1;
+
+        for (size_t j = 0; j < symbols->locals_stack[i].num_locals; j++) {
+            if (strcmp(name, symbols->locals_stack[i].local_names[j]) == 0) {
+                *result = symbols->locals_stack[i].local_types[j];
+                return true;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < symbols->num_globals; i++) {
+        if (strcmp(name, symbols->global_names[i]) == 0) {
+            *result = symbols->global_types[i];
+            return true;
+        }
+    }
+
+    return false;
 }

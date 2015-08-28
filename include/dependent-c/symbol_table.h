@@ -24,13 +24,13 @@ const char *symbol_intern(InternedSymbols *interns, const char *str);
 /***** Symbol Table (aka map from Symbol -> Type) ****************************/
 typedef struct {
     size_t num_globals;
-    char **global_names;
+    const char **global_names;
     Expr *global_types;
 
     size_t locals_stack_size;
     struct {
         size_t num_locals;
-        char **local_names;
+        const char **local_names;
         Expr *local_types;
     } *locals_stack;
 } SymbolTable;
@@ -45,7 +45,13 @@ void symbol_table_leave_scope(SymbolTable *symbols);
 /* Attempt to register a symbol and its type. If the symbol is already defined
  * in the current scope it is not registered and false is returned.
  */
-bool symbol_table_register_global(SymbolTable *symbols, char *name, Expr type);
-bool symbol_table_register_local(SymbolTable *symbols, char *name, Expr type);
+bool symbol_table_register_global(SymbolTable *symbols,
+    const char *name, Expr type);
+bool symbol_table_register_local(SymbolTable *symbols,
+    const char *name, Expr type);
+
+/* Lookup a symbol's type. Returns false if the symbol is not in scope. */
+bool symbol_table_lookup(SymbolTable *symbols,
+    const char *name, Expr *result);
 
 #endif /* DEPENDENT_C_SYMBOL_TABLE_H */
