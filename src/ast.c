@@ -615,7 +615,7 @@ void top_level_pprint(TopLevel top_level) {
     switch (top_level.tag) {
        case TOP_LEVEL_FUNC:
         expr_pprint(0, top_level.data.func.ret_type);
-        printf(" %s(", top_level.data.func.name);
+        printf(" %s(", top_level.name);
 
         bool first_param = true;
         for (size_t i = 0; i < top_level.data.func.num_params; i++) {

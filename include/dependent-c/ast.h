@@ -140,10 +140,10 @@ typedef enum {
 
 typedef struct {
     TopLevelTag tag;
+    const char *name;
     union {
         struct {
             Expr ret_type;
-            const char *name;
             size_t num_params;
             Expr *param_types;
             const char **param_names;

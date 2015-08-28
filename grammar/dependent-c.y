@@ -219,7 +219,7 @@ top_level:
       expr TOK_IDENT '(' param_list ')' block {
         $$.tag = TOP_LEVEL_FUNC;
         $$.data.func.ret_type = $1;
-        $$.data.func.name = $2;
+        $$.name = $2;
         $$.data.func.num_params = $4.len;
         $$.data.func.param_types = $4.types;
         $$.data.func.param_names = $4.names;
