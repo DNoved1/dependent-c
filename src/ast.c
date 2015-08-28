@@ -421,14 +421,14 @@ void translation_unit_free(TranslationUnit unit) {
 }
 
 /***** Pretty-printing ast nodes *********************************************/
-static void print_indentation_whitespace(int nesting) {
+static void print_indentation_whitespace(FILE *to, int nesting) {
     for (int i = 0; i < nesting; i++) {
-        printf("    ");
+        fprintf(to, "    ");
     }
 }
 
-static void literal_pprint(int nesting, Literal literal) {
-#define tag_to_string(tag, str) case tag: printf(str); break;
+static void literal_pprint(FILE *to, int nesting, Literal literal) {
+#define tag_to_string(tag, str) case tag: fprintf(to, str); break;
 
     switch (literal.tag) {
       tag_to_string(LIT_TYPE, "type")
@@ -443,212 +443,198 @@ static void literal_pprint(int nesting, Literal literal) {
       tag_to_string(LIT_S64, "s64")
 
       case LIT_INTEGRAL:
-        printf("%" PRIu64, literal.data.integral);
+        fprintf(to, "%" PRIu64, literal.data.integral);
         break;
     }
 
 #undef tag_to_string
 }
 
-static void expr_pprint_(int nesting, Expr expr) {
-    putchar('(');
-    expr_pprint(nesting, expr);
-    putchar(')');
+static void expr_pprint_(FILE *to, int nesting, Expr expr) {
+    putc('(', to);
+    expr_pprint(to, nesting, expr);
+    putc(')', to);
 }
 
-void expr_pprint(int nesting, Expr expr) {
-    bool first = true;
-
+void expr_pprint(FILE *to, int nesting, Expr expr) {
     switch (expr.tag) {
       case EXPR_LITERAL:
-        literal_pprint(nesting, expr.data.literal);
+        literal_pprint(to, nesting, expr.data.literal);
         break;
 
       case EXPR_IDENT:
-        fputs(expr.data.ident, stdout);
+        fputs(expr.data.ident, to);
         break;
 
       case EXPR_FUNC_TYPE:
-        expr_pprint_(nesting, *expr.data.func_type.ret_type);
-        putchar('(');
+        expr_pprint_(to, nesting, *expr.data.func_type.ret_type);
+        putc('(', to);
         for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
-            if (first) {
-                first = false;
-            } else {
-                printf(", ");
+            if (i > 0) {
+                fprintf(to, ", ");
             }
 
-            expr_pprint(nesting, expr.data.func_type.param_types[i]);
+            expr_pprint(to, nesting, expr.data.func_type.param_types[i]);
             if (expr.data.func_type.param_names[i] != NULL) {
-                printf(" %s", expr.data.func_type.param_names[i]);
+                fprintf(to, " %s", expr.data.func_type.param_names[i]);
             }
         }
-        putchar(')');
+        putc(')', to);
         break;
 
       case EXPR_CALL:
-        expr_pprint_(nesting, *expr.data.call.func);
-        putchar('(');
+        expr_pprint_(to, nesting, *expr.data.call.func);
+        putc('(', to);
         for (size_t i = 0; i < expr.data.call.num_args; i++) {
-            if (first) {
-                first = false;
-            } else {
-                printf(", ");
+            if (i > 0) {
+                fprintf(to, ", ");
             }
 
-            expr_pprint(nesting, expr.data.call.args[i]);
+            expr_pprint(to, nesting, expr.data.call.args[i]);
         }
-        putchar(')');
+        putc(')', to);
         break;
 
       case EXPR_STRUCT:
-        printf("struct { ");
+        fprintf(to, "struct { ");
         for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
-            expr_pprint(nesting, expr.data.struct_.field_types[i]);
-            printf(" %s; ", expr.data.struct_.field_names[i]);
+            expr_pprint(to, nesting, expr.data.struct_.field_types[i]);
+            fprintf(to, " %s; ", expr.data.struct_.field_names[i]);
         }
-        putchar('}');
+        putc('}', to);
         break;
 
       case EXPR_UNION:
-        printf("union { ");
+        fprintf(to, "union { ");
         for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
-            expr_pprint(nesting, expr.data.union_.field_types[i]);
-            printf(" %s; ", expr.data.union_.field_names[i]);
+            expr_pprint(to, nesting, expr.data.union_.field_types[i]);
+            fprintf(to, " %s; ", expr.data.union_.field_names[i]);
         }
-        putchar('}');
+        putc('}', to);
         break;
 
       case EXPR_PACK:
-        expr_pprint_(nesting, *expr.data.pack.type);
-        putchar('{');
+        expr_pprint_(to, nesting, *expr.data.pack.type);
+        putc('{', to);
         for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
-            if (first) {
-                first = false;
-            } else {
-                printf(", ");
+            if (i > 0) {
+                fprintf(to, ", ");
             }
 
-            printf(".%s = ", expr.data.pack.field_names[i]);
-            expr_pprint(nesting, expr.data.pack.assigns[i]);
+            fprintf(to, ".%s = ", expr.data.pack.field_names[i]);
+            expr_pprint(to, nesting, expr.data.pack.assigns[i]);
         }
-        putchar('}');
+        putc('}', to);
         break;
 
       case EXPR_MEMBER:
-        expr_pprint_(nesting, *expr.data.member.record);
-        printf(".%s", expr.data.member.field);
+        expr_pprint_(to, nesting, *expr.data.member.record);
+        fprintf(to, ".%s", expr.data.member.field);
         break;
 
       case EXPR_POINTER:
-        expr_pprint_(nesting, *expr.data.pointer);
-        putchar('*');
+        expr_pprint_(to, nesting, *expr.data.pointer);
+        putc('*', to);
         break;
 
       case EXPR_REFERENCE:
-        putchar('&');
-        expr_pprint_(nesting, *expr.data.reference);
+        putc('&', to);
+        expr_pprint_(to, nesting, *expr.data.reference);
         break;
 
       case EXPR_DEREFERENCE:
-        putchar('*');
-        expr_pprint_(nesting, *expr.data.dereference);
+        putc('*', to);
+        expr_pprint_(to, nesting, *expr.data.dereference);
         break;
 
       case EXPR_FUNC_TYPE_OR_CALL:
-        expr_pprint_(nesting, *expr.data.func_type_or_call.ret_type_or_func);
-        putchar('(');
+        expr_pprint_(to, nesting,
+            *expr.data.func_type_or_call.ret_type_or_func);
+        putc('(', to);
         for (size_t i = 0; i < expr.data.func_type_or_call.num_params_or_args;
                 i++) {
-            if (first) {
-                first = false;
-            } else {
-                printf(", ");
+            if (i > 0) {
+                fprintf(to, ", ");
             }
 
-            expr_pprint(nesting,
+            expr_pprint(to, nesting,
                 expr.data.func_type_or_call.param_types_or_args[i]);
             if (expr.data.func_type_or_call.param_names[i] != NULL) {
-                printf(" %s", expr.data.func_type_or_call.param_names[i]);
+                fprintf(to, " %s", expr.data.func_type_or_call.param_names[i]);
             }
         }
-        putchar(')');
+        putc(')', to);
         break;
     }
 }
 
-void statement_pprint(int nesting, Statement statement) {
-    print_indentation_whitespace(nesting);
+void statement_pprint(FILE *to, int nesting, Statement statement) {
+    print_indentation_whitespace(to, nesting);
 
     switch (statement.tag) {
       case STATEMENT_EMPTY:
-        printf(";\n");
+        fprintf(to, ";\n");
         break;
 
       case STATEMENT_EXPR:
-        expr_pprint(nesting, statement.data.expr);
-        printf(";\n");
+        expr_pprint(to, nesting, statement.data.expr);
+        fprintf(to, ";\n");
         break;
 
       case STATEMENT_BLOCK:
-        printf("{\n");
+        fprintf(to, "{\n");
         for (size_t i = 0; i < statement.data.block.num_statements; i++) {
-            statement_pprint(nesting + 1, statement.data.block.statements[i]);
+            statement_pprint(to, nesting + 1,
+                statement.data.block.statements[i]);
         }
-        print_indentation_whitespace(nesting);
-        printf("}\n");
+        print_indentation_whitespace(to, nesting);
+        fprintf(to, "}\n");
         break;
 
       case STATEMENT_DECL:
-        expr_pprint(nesting, statement.data.decl.type);
-        printf(" %s", statement.data.decl.name);
+        expr_pprint(to, nesting, statement.data.decl.type);
+        fprintf(to, " %s", statement.data.decl.name);
         if (statement.data.decl.is_initialized) {
-            printf(" = ");
-            expr_pprint(nesting, statement.data.decl.initial_value);
+            fprintf(to, " = ");
+            expr_pprint(to, nesting, statement.data.decl.initial_value);
         }
-        printf(";\n");
+        fprintf(to, ";\n");
         break;
     }
 }
 
-void top_level_pprint(TopLevel top_level) {
+void top_level_pprint(FILE *to, TopLevel top_level) {
     switch (top_level.tag) {
        case TOP_LEVEL_FUNC:
-        expr_pprint(0, top_level.data.func.ret_type);
-        printf(" %s(", top_level.name);
+        expr_pprint(to, 0, top_level.data.func.ret_type);
+        fprintf(to, " %s(", top_level.name);
 
-        bool first_param = true;
         for (size_t i = 0; i < top_level.data.func.num_params; i++) {
-            if (first_param) {
-                first_param = false;
-            } else {
-                printf(", ");
+            if (i > 0) {
+                fprintf(to, ", ");
             }
 
-            expr_pprint(0, top_level.data.func.param_types[i]);
+            expr_pprint(to, 0, top_level.data.func.param_types[i]);
             if (top_level.data.func.param_names[i] != NULL) {
-                printf(" %s", top_level.data.func.param_names[i]);
+                fprintf(to, " %s", top_level.data.func.param_names[i]);
             }
         }
-        printf(") {\n");
+        fprintf(to, ") {\n");
 
         for (size_t i = 0; i < top_level.data.func.num_statements; i++) {
-            statement_pprint(1, top_level.data.func.statements[i]);
+            statement_pprint(to, 1, top_level.data.func.statements[i]);
         }
-        putchar('}');
+        putc('}', to);
         break;
     }
 }
 
-void translation_unit_pprint(TranslationUnit unit) {
-    bool first = true;
+void translation_unit_pprint(FILE *to, TranslationUnit unit) {
     for (size_t i = 0; i < unit.num_top_levels; i++) {
-        if (first) {
-            first = false;
-        } else {
-            putchar('\n');
+        if (i > 0) {
+            putc('\n', to);
         }
 
-        top_level_pprint(unit.top_levels[i]);
+        top_level_pprint(to, unit.top_levels[i]);
     }
 }

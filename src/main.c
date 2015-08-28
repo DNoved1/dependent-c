@@ -11,7 +11,7 @@ int main(void) {
     int ret_value = EXIT_SUCCESS;
 
     if (yyparse(&context) == 0) {
-        translation_unit_pprint(context.ast);
+        translation_unit_pprint(stdout, context.ast);
     } else {
         ret_value = EXIT_FAILURE;
     }
