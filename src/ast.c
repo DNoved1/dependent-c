@@ -125,24 +125,6 @@ bool expr_equal(Expr x, Expr y) {
 
       case EXPR_DEREFERENCE:
         return expr_equal(*x.data.dereference, *y.data.dereference);
-
-      case EXPR_FUNC_TYPE_OR_CALL:
-        if (!expr_equal(*x.data.func_type_or_call.ret_type_or_func,
-                    *y.data.func_type_or_call.ret_type_or_func)
-                || x.data.func_type_or_call.num_params_or_args !=
-                    y.data.func_type_or_call.num_params_or_args) {
-            return false;
-        }
-        for (size_t i = 0; i < x.data.func_type_or_call.num_params_or_args;
-                i++) {
-            if (!expr_equal(x.data.func_type_or_call.param_types_or_args[i],
-                        y.data.func_type_or_call.param_types_or_args[i])
-                    || x.data.func_type_or_call.param_names[i] !=
-                        y.data.func_type_or_call.param_names[i]) {
-                return false;
-            }
-        }
-        return true;
     }
 }
 
@@ -261,26 +243,6 @@ Expr expr_copy(Expr x) {
         y.data.dereference = malloc(sizeof *y.data.dereference);
         *y.data.dereference = expr_copy(*x.data.dereference);
         break;
-
-      case EXPR_FUNC_TYPE_OR_CALL:
-        y.data.func_type_or_call.ret_type_or_func = malloc(
-            sizeof *y.data.func_type_or_call.ret_type_or_func);
-        *y.data.func_type_or_call.ret_type_or_func = expr_copy(
-            *x.data.func_type_or_call.ret_type_or_func);
-        size_t len =
-            y.data.func_type_or_call.num_params_or_args =
-            x.data.func_type_or_call.num_params_or_args;
-        y.data.func_type_or_call.param_types_or_args = calloc(
-            sizeof *y.data.func_type_or_call.param_types_or_args, len);
-        y.data.func_type_or_call.param_names = calloc(
-            sizeof *y.data.func_type_or_call.param_names, len);
-        for (size_t i = 0; i < len; i++) {
-            y.data.func_type_or_call.param_types_or_args[i] =
-                expr_copy(x.data.func_type_or_call.param_types_or_args[i]);
-            y.data.func_type_or_call.param_names[i] =
-                x.data.func_type_or_call.param_names[i];
-        }
-        break;
     }
 
     return y;
@@ -356,17 +318,6 @@ void expr_free(Expr expr) {
       case EXPR_DEREFERENCE:
         expr_free(*expr.data.dereference);
         free(expr.data.dereference);
-        break;
-
-      case EXPR_FUNC_TYPE_OR_CALL:
-        expr_free(*expr.data.func_type_or_call.ret_type_or_func);
-        free(expr.data.func_type_or_call.ret_type_or_func);
-        for (size_t i = 0; i < expr.data.func_type_or_call.num_params_or_args;
-                i++) {
-            expr_free(expr.data.func_type_or_call.param_types_or_args[i]);
-        }
-        free(expr.data.func_type_or_call.param_types_or_args);
-        free(expr.data.func_type_or_call.param_names);
         break;
     }
 }
@@ -468,7 +419,7 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
 
       case EXPR_FUNC_TYPE:
         expr_pprint_(to, nesting, *expr.data.func_type.ret_type);
-        putc('(', to);
+        putc('[', to);
         for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
@@ -479,7 +430,7 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
                 fprintf(to, " %s", expr.data.func_type.param_names[i]);
             }
         }
-        putc(')', to);
+        putc(']', to);
         break;
 
       case EXPR_CALL:
@@ -545,25 +496,6 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
       case EXPR_DEREFERENCE:
         putc('*', to);
         expr_pprint_(to, nesting, *expr.data.dereference);
-        break;
-
-      case EXPR_FUNC_TYPE_OR_CALL:
-        expr_pprint_(to, nesting,
-            *expr.data.func_type_or_call.ret_type_or_func);
-        putc('(', to);
-        for (size_t i = 0; i < expr.data.func_type_or_call.num_params_or_args;
-                i++) {
-            if (i > 0) {
-                fprintf(to, ", ");
-            }
-
-            expr_pprint(to, nesting,
-                expr.data.func_type_or_call.param_types_or_args[i]);
-            if (expr.data.func_type_or_call.param_names[i] != NULL) {
-                fprintf(to, " %s", expr.data.func_type_or_call.param_names[i]);
-            }
-        }
-        putc(')', to);
         break;
     }
 }

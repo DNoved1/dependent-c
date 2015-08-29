@@ -45,6 +45,10 @@
         Expr type;
         const char *name; /* May be null if not named */
     } param;
+    struct {
+        size_t len;
+        Expr *args;
+    } arg_list;
 
     struct {
         size_t len;
@@ -99,6 +103,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 
 %type <param_list> param_list param_list_
 %type <param> param
+%type <arg_list> arg_list arg_list_
 
 %type <pack_init_list> pack_init_list pack_init_list_
 %type <pack_init> pack_init
@@ -158,13 +163,19 @@ postfix_expr:
         $$.data.member.record = malloc(sizeof $1);
         *$$.data.member.record = $1;
         $$.data.member.field = $3; }
-    | postfix_expr '(' param_list ')' {
-        $$.tag = EXPR_FUNC_TYPE_OR_CALL;
-        $$.data.func_type_or_call.ret_type_or_func = malloc(sizeof $1);
-        *$$.data.func_type_or_call.ret_type_or_func = $1;
-        $$.data.func_type_or_call.num_params_or_args = $3.len;
-        $$.data.func_type_or_call.param_types_or_args = $3.types;
-        $$.data.func_type_or_call.param_names = $3.names; }
+    | postfix_expr '(' arg_list ')' {
+        $$.tag = EXPR_CALL;
+        $$.data.call.func = malloc(sizeof $1);
+        *$$.data.call.func = $1;
+        $$.data.call.num_args = $3.len;
+        $$.data.call.args = $3.args; }
+    | postfix_expr '[' param_list ']' {
+        $$.tag = EXPR_FUNC_TYPE;
+        $$.data.func_type.ret_type = malloc(sizeof $1);
+        *$$.data.func_type.ret_type = $1;
+        $$.data.func_type.num_params = $3.len;
+        $$.data.func_type.param_types = $3.types;
+        $$.data.func_type.param_names = $3.names; }
     | '(' expr ')' '{' pack_init_list '}' {
         $$.tag = EXPR_PACK;
         $$.data.pack.type = malloc(sizeof $2);
@@ -176,11 +187,11 @@ postfix_expr:
 
 prefix_expr:
       postfix_expr
-    | '&' expr {
+    | '&' prefix_expr {
         $$.tag = EXPR_REFERENCE;
         $$.data.reference = malloc(sizeof $2);
         *$$.data.reference = $2; }
-    | '*' expr {
+    | '*' prefix_expr {
         $$.tag = EXPR_DEREFERENCE;
         $$.data.dereference = malloc(sizeof $2);
         *$$.data.dereference = $2; }
@@ -287,6 +298,24 @@ param:
     | expr TOK_IDENT {
         $$.type = $1;
         $$.name = $2; }
+    ;
+
+arg_list:
+      %empty {
+        $$.len = 0;
+        $$.args = NULL; }
+    | arg_list_
+    ;
+arg_list_:
+      expr {
+        $$.len = 1;
+        $$.args = malloc(sizeof *$$.args);
+        $$.args[0] = $1; }
+    | arg_list_ ',' expr {
+        $$ = $1;
+        $$.args = realloc($$.args, ($$.len + 1) * sizeof *$$.args);
+        $$.args[$$.len] = $3;
+        $$.len += 1; }
     ;
 
 pack_init_list:

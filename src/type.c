@@ -157,30 +157,6 @@ static void expr_free_vars(Expr expr, size_t *num_free, const char ***free) {
       case EXPR_DEREFERENCE:
         expr_free_vars(*expr.data.dereference, num_free, free);
         break;
-
-      case EXPR_FUNC_TYPE_OR_CALL:
-        expr_free_vars(*expr.data.func_type_or_call.ret_type_or_func,
-            num_free, free);
-        for (size_t i = 0; i < expr.data.func_type_or_call.num_params_or_args;
-                i++) {
-            if (expr.data.func_type_or_call.param_names[i] != NULL) {
-                symbol_set_delete(num_free, free,
-                    expr.data.func_type_or_call.param_names[i]);
-            }
-        }
-        for (size_t i = 0; i < expr.data.func_type_or_call.num_params_or_args;
-                i++) {
-            expr_free_vars(expr.data.func_type_or_call.param_types_or_args[i],
-                num_free_temp, free_temp);
-            for (size_t j = 0; j < i; j++) {
-                if (expr.data.func_type_or_call.param_names[j] != NULL) {
-                    symbol_set_delete(num_free_temp, free_temp,
-                        expr.data.func_type_or_call.param_names[j]);
-                }
-            }
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-        }
-        break;
     }
 }
 

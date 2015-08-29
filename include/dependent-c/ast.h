@@ -30,27 +30,24 @@ typedef struct {
 /***** Expressions ***********************************************************/
 typedef enum {
     // Misc.
-      EXPR_LITERAL      // type, u8, s64, 42, etc
-    , EXPR_IDENT        // foo, bar, baz, etc
+      EXPR_LITERAL
+    , EXPR_IDENT
 
     // Function type and destructor. Constructor is a declaration, not an
     // expression.
-    , EXPR_FUNC_TYPE    // Expr '(' { Expr | Expr Ident }(',') ')'
-    , EXPR_CALL         // Expr '(' { Expr }(',') ')'
+    , EXPR_FUNC_TYPE
+    , EXPR_CALL
 
     // Product/Union type, constructor, and destructor.
-    , EXPR_STRUCT       // 'struct' '{' { Expr Ident ';' }() '}'
-    , EXPR_UNION        // 'union' '{' { Expr Ident ';' }() '}'
-    , EXPR_PACK         // '(' Expr ')' '{' { '.' Ident '=' Expr }(',') '}'
-    , EXPR_MEMBER       // Expr '.' Ident
+    , EXPR_STRUCT
+    , EXPR_UNION
+    , EXPR_PACK
+    , EXPR_MEMBER
 
     // Pointer type, constructor, and destructor.
-    , EXPR_POINTER      // Expr '*'
-    , EXPR_REFERENCE    // '&' Expr
-    , EXPR_DEREFERENCE  // '*' Expr
-
-    // Ambiguous nodes
-    , EXPR_FUNC_TYPE_OR_CALL
+    , EXPR_POINTER
+    , EXPR_REFERENCE
+    , EXPR_DEREFERENCE
 } ExprTag;
 
 typedef struct Expr Expr;
@@ -96,13 +93,6 @@ struct Expr {
         Expr *pointer;
         Expr *reference;
         Expr *dereference;
-
-        struct {
-            Expr *ret_type_or_func;
-            size_t num_params_or_args;
-            Expr *param_types_or_args;
-            const char **param_names;
-        } func_type_or_call;
     } data;
 };
 
