@@ -164,6 +164,7 @@ void symbol_table_leave_scope(SymbolTable *symbols) {
 
     free(symbols->locals_stack[symbols->locals_stack_size - 1].local_names);
     free(symbols->locals_stack[symbols->locals_stack_size - 1].local_types);
+    symbols->locals_stack_size -= 1;
     // Not reallocing to smaller size here since we'll likely reuse the the
     // space later.
 }

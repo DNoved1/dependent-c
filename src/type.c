@@ -612,5 +612,90 @@ bool type_equal(Context *context, Expr type1, Expr type2) {
     // TODO, do normalization and alpha equivalence rather than simple
     // structural equivalence.
 
-    return expr_equal(type1, type2);
+    if (expr_equal(type1, type2)) {
+        return true;
+    } else {
+        fprintf(stderr, "Could not determine that (");
+        expr_pprint(stderr, 0, type1);
+        fprintf(stderr, ") ~ (");
+        expr_pprint(stderr, 0, type2);
+        fprintf(stderr, ").\n");
+        return false;
+    }
+}
+
+static bool type_check_statement(Context *context, Statement statement) {
+    Expr temp;
+
+    switch (statement.tag) {
+      case STATEMENT_EMPTY:
+        return true;
+
+      case STATEMENT_EXPR:
+        if (!type_infer(context, statement.data.expr, &temp)) {
+            return false;
+        }
+        expr_free(temp);
+        return true;
+
+      case STATEMENT_BLOCK:
+        symbol_table_enter_scope(&context->symbol_table);
+        for (size_t i = 0; i < statement.data.block.num_statements; i++) {
+            if (!type_check_statement(context,
+                    statement.data.block.statements[i])) {
+                symbol_table_leave_scope(&context->symbol_table);
+                return false;
+            }
+        }
+        symbol_table_leave_scope(&context->symbol_table);
+        return true;
+
+      case STATEMENT_DECL:
+        if (!type_check(context, statement.data.decl.type, literal_expr_type)) {
+            return false;
+        }
+        if (statement.data.decl.is_initialized) {
+            if (!type_check(context, statement.data.decl.initial_value,
+                    statement.data.decl.type)) {
+                return false;
+            }
+        }
+        symbol_table_register_local(&context->symbol_table,
+            statement.data.decl.name, statement.data.decl.type);
+        return true;
+    }
+}
+
+bool type_check_top_level(Context *context, TopLevel top_level) {
+    switch (top_level.tag) {
+      case TOP_LEVEL_FUNC:;
+        Expr func_type = (Expr) {
+              .tag = EXPR_FUNC_TYPE
+            , .data.func_type.ret_type = &top_level.data.func.ret_type
+            , .data.func_type.num_params = top_level.data.func.num_params
+            , .data.func_type.param_types = top_level.data.func.param_types
+            , .data.func_type.param_names = top_level.data.func.param_names
+        };
+        if (!type_check(context, func_type, literal_expr_type)) {
+            return false;
+        }
+        symbol_table_register_global(&context->symbol_table,
+            top_level.name, func_type);
+        symbol_table_enter_scope(&context->symbol_table);
+        for (size_t i = 0; i < top_level.data.func.num_params; i++) {
+            symbol_table_register_local(&context->symbol_table,
+                top_level.data.func.param_names[i],
+                top_level.data.func.param_types[i]);
+        }
+        for (size_t i = 0; i < top_level.data.func.num_statements; i++) {
+            if (!type_check_statement(context,
+                    top_level.data.func.statements[i])) {
+                symbol_table_leave_scope(&context->symbol_table);
+                return false;
+            }
+        }
+        symbol_table_leave_scope(&context->symbol_table);
+        // TODO, need to ensure the return value matches
+        return true;
+    }
 }

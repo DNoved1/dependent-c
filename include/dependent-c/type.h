@@ -18,4 +18,6 @@ bool type_check(Context *context, Expr expr, Expr type);
 bool type_infer(Context *context, Expr expr, Expr *result);
 bool type_equal(Context *context, Expr type1, Expr type2);
 
+bool type_check_top_level(Context *context, TopLevel top_level);
+
 #endif /* DEPENDENT_C_TYPE_H */
