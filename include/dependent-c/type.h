@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "dependent-c/ast.h"
+#include "dependent-c/general.h"
 
 /* Analyze the dependencies in the type signatures of top level declarations,
  * returning true and the order if successful. If there is a cyclical
@@ -13,11 +14,8 @@
 bool top_level_topological_sort(size_t len, const TopLevel top_levels[len],
     size_t order[len]);
 
-/* Check if an expression is a kind in System-F omega. Inductively the set K
- * of kinds is defined as:
- *     'type' is a member of K
- *     K(K, K, ...) is a member of K
- */
-bool type_check_is_kind(Expr expr);
+bool type_check(Context *context, Expr expr, Expr type);
+bool type_infer(Context *context, Expr expr, Expr *result);
+bool type_equal(Context *context, Expr type1, Expr type2);
 
 #endif /* DEPENDENT_C_TYPE_H */

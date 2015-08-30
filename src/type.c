@@ -1,164 +1,16 @@
 #include <assert.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "dependent-c/ast.h"
+#include "dependent-c/general.h"
+#include "dependent-c/symbol_table.h"
 #include "dependent-c/type.h"
 
 /***** Top Level Dependency Analysis *****************************************/
-
-/* Remove a symbol at an index from a symbol set. */
-static void symbol_set_remove(size_t *set_size, const char ***set,
-        size_t index) {
-    assert(*set_size > index);
-
-    memmove(*set + index, *set + index + 1,
-        (*set_size - index - 1) * sizeof **set);
-    *set = realloc(*set, (*set_size - 1) * sizeof **set);
-    *set_size -= 1;
-}
-
-/* Remove a symbol from a symbol set if present. */
-static void symbol_set_delete(size_t *set_size, const char ***set,
-        const char *delete) {
-    for (size_t i = 0; i < *set_size; i++) {
-        if (delete == (*set)[i]) {
-            symbol_set_remove(set_size, set, i);
-            break;
-        }
-    }
-}
-
-/* Add a symbol to a symbol set if not present. */
-static void symbol_set_add(size_t *set_size, const char ***set,
-        const char *add) {
-    bool unique = true;
-
-    for (size_t i = 0; i < *set_size; i++) {
-        if (add == (*set)[i]) {
-            unique = false;
-            break;
-        }
-    }
-
-    if (unique) {
-        *set = realloc(*set, (*set_size + 1) * sizeof **set);
-        (*set)[*set_size] = add;
-        *set_size += 1;
-    }
-}
-
-/* Union two sets. The result is placed into the first set and the second
- * set is freed. */
-static void symbol_set_union(size_t *set1_size, const char ***set1,
-        size_t *set2_size, const char ***set2) {
-    for (size_t i = 0; i < *set2_size; i++) {
-        symbol_set_add(set1_size, set1, (*set2)[i]);
-    }
-
-    free(*set2);
-    *set2 = NULL;
-    *set2_size = 0;
-}
-
-/* Calculate the set of free variables in an expression. */
-static void expr_free_vars(Expr expr, size_t *num_free, const char ***free) {
-    size_t num_free_temp[1];
-    const char **free_temp[1];
-
-    switch (expr.tag) {
-      case EXPR_LITERAL:
-        *num_free = 0;
-        *free = NULL;
-        break;
-
-      case EXPR_IDENT:
-        *num_free = 1;
-        *free = malloc(sizeof **free);
-        **free = expr.data.ident;
-        break;
-
-      case EXPR_FUNC_TYPE:
-        expr_free_vars(*expr.data.func_type.ret_type, num_free, free);
-        for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
-            if (expr.data.func_type.param_names[i] != NULL) {
-                symbol_set_delete(num_free, free,
-                    expr.data.func_type.param_names[i]);
-            }
-        }
-        for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
-            expr_free_vars(expr.data.func_type.param_types[i],
-                num_free_temp, free_temp);
-            for (size_t j = 0; j < i; j++) {
-                if (expr.data.func_type.param_names[j] != NULL) {
-                    symbol_set_delete(num_free_temp, free_temp,
-                        expr.data.func_type.param_names[j]);
-                }
-            }
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-        }
-        break;
-
-      case EXPR_CALL:
-        expr_free_vars(*expr.data.call.func, num_free, free);
-        for (size_t i = 0; i < expr.data.call.num_args; i++) {
-            expr_free_vars(expr.data.call.args[i], num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-        }
-        break;
-
-      case EXPR_STRUCT:
-        *num_free = 0;
-        *free = NULL;
-        for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
-            expr_free_vars(expr.data.struct_.field_types[i],
-                num_free_temp, free_temp);
-            for (size_t j = 0; j < i; j++) {
-                symbol_set_delete(num_free_temp, free_temp,
-                    expr.data.struct_.field_names[j]);
-            }
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-        }
-        break;
-
-      case EXPR_UNION:
-        *num_free = 0;
-        *free = NULL;
-        for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
-            expr_free_vars(expr.data.union_.field_types[i],
-                num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-        }
-        break;
-
-      case EXPR_PACK:
-        expr_free_vars(*expr.data.pack.type, num_free, free);
-        for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
-            expr_free_vars(expr.data.pack.assigns[i],
-                num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-        }
-        break;
-
-      case EXPR_MEMBER:
-        expr_free_vars(*expr.data.member.record, num_free, free);
-        break;
-
-      case EXPR_POINTER:
-        expr_free_vars(*expr.data.pointer, num_free, free);
-        break;
-
-      case EXPR_REFERENCE:
-        expr_free_vars(*expr.data.reference, num_free, free);
-        break;
-
-      case EXPR_DEREFERENCE:
-        expr_free_vars(*expr.data.dereference, num_free, free);
-        break;
-    }
-}
 
 static void block_free_vars(size_t len, Statement[len],
     size_t*, const char***);
@@ -299,8 +151,466 @@ bool top_level_topological_sort(size_t len, const TopLevel top_levels[len],
     return result;
 }
 
-bool type_check_is_kind(Expr expr) {
-    // TODO: implement
+/***** Type Checking / Inference *********************************************/
+bool type_check(Context *context, Expr expr, Expr type) {
+    Expr type2;
 
-    return false;
+    if (!type_infer(context, expr, &type2)) {
+        return false;
+    }
+
+    bool ret_val = type_equal(context, type, type2);
+    expr_free(type2);
+    return ret_val;
+}
+
+static bool type_infer_literal(Context *context, Literal literal,
+        Expr *result) {
+    switch (literal.tag) {
+      case LIT_TYPE:
+      case LIT_VOID:
+      case LIT_U8:
+      case LIT_S8:
+      case LIT_U16:
+      case LIT_S16:
+      case LIT_U32:
+      case LIT_S32:
+      case LIT_U64:
+      case LIT_S64:
+        *result = literal_expr_type;
+        return true;
+
+      case LIT_INTEGRAL:
+        *result = (Expr){
+              .tag = EXPR_LITERAL
+            , .data.literal = (Literal){.tag = LIT_U64}
+        };
+        return true;
+    }
+}
+
+static bool type_infer_func_type(Context *context, Expr expr, Expr *result) {
+    assert(expr.tag == EXPR_FUNC_TYPE);
+    bool ret_val = true;
+
+    symbol_table_enter_scope(&context->symbol_table);
+
+    for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
+        if (type_check(context, expr.data.func_type.param_types[i],
+                literal_expr_type)) {
+            if (expr.data.func_type.param_names[i] != NULL) {
+                symbol_table_register_local(&context->symbol_table,
+                    expr.data.func_type.param_names[i],
+                    expr.data.func_type.param_types[i]);
+            }
+        } else {
+            ret_val = false;
+            goto end_of_function;
+        }
+    }
+
+    if (!type_check(context, *expr.data.func_type.ret_type, literal_expr_type)) {
+        ret_val = false;
+        goto end_of_function;
+    }
+
+    *result = literal_expr_type;
+
+end_of_function:
+    symbol_table_leave_scope(&context->symbol_table);
+    return ret_val;
+}
+
+static bool type_infer_call(Context *context, Expr expr, Expr *result) {
+    assert(expr.tag == EXPR_CALL);
+    Expr func_type;
+
+    if (!type_infer(context, *expr.data.call.func, &func_type)) {
+        return false;
+    }
+
+    if (func_type.tag != EXPR_FUNC_TYPE) {
+        fprintf(stderr, "Cannot call non-function type (");
+        expr_pprint(stderr, 0, func_type);
+        fprintf(stderr, ").\n");
+
+        expr_free(func_type);
+        return false;
+    }
+
+    if (func_type.data.func_type.num_params != expr.data.call.num_args) {
+        fprintf(stderr, "Calling function which expects %zu parameters with "
+            "%zu arguments.\n", func_type.data.func_type.num_params,
+            expr.data.call.num_args);
+
+        expr_free(func_type);
+        return false;
+    }
+
+    for (size_t i = 0; i < func_type.data.func_type.num_params; i++) {
+        Expr arg = expr.data.call.args[i];
+        const char *param_name = func_type.data.func_type.param_names[i];
+
+        if (type_check(context, arg, func_type.data.func_type.param_types[i])) {
+            for (size_t j = i + 1; j < func_type.data.func_type.num_params; j++) {
+                if (!expr_subst(context,
+                        &func_type.data.func_type.param_types[j],
+                        param_name, arg)) {
+                    expr_free(func_type);
+                    return false;
+                }
+            }
+
+            if (!expr_subst(context, func_type.data.func_type.ret_type,
+                    param_name, arg)) {
+                expr_free(func_type);
+                return false;
+            }
+        } else {
+            expr_free(func_type);
+            return false;
+        }
+    }
+
+    *result = expr_copy(*func_type.data.func_type.ret_type);
+    expr_free(func_type);
+    return true;
+}
+
+static bool type_infer_struct(Context *context, Expr expr, Expr *result) {
+    assert(expr.tag == EXPR_STRUCT);
+    bool ret_val = true;
+
+    // Check that there are no duplicated field names
+    for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
+        for (size_t j = i + 1; j < expr.data.struct_.num_fields; j++) {
+            if (expr.data.struct_.field_names[i]
+                    == expr.data.struct_.field_names[i]) {
+                fprintf(stderr, "Structure declares field \"%s\" multiple "
+                    "times.\n", expr.data.struct_.field_names[i]);
+                return false;
+            }
+        }
+    }
+
+    symbol_table_enter_scope(&context->symbol_table);
+
+    for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
+        if (type_check(context, expr.data.struct_.field_types[i],
+                literal_expr_type)) {
+            symbol_table_register_local(&context->symbol_table,
+                expr.data.struct_.field_names[i],
+                expr.data.struct_.field_types[i]);
+        } else {
+            ret_val = false;
+            goto end_of_function;
+        }
+    }
+
+    *result = literal_expr_type;
+
+end_of_function:
+    symbol_table_leave_scope(&context->symbol_table);
+    return ret_val;
+}
+
+static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
+    assert(expr.tag == EXPR_PACK);
+
+    if (expr.data.pack.type->tag == EXPR_STRUCT) {
+        // Check that there are no duplicated assignments
+        for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
+            for (size_t j = i + 1; j < expr.data.pack.num_assigns; j++) {
+                if (expr.data.pack.field_names[i]
+                        == expr.data.pack.field_names[j]) {
+                    fprintf(stderr, "Assigning to field \"%s\" twice in packed "
+                        "expression.\n", expr.data.pack.field_names[i]);
+                    return false;
+                }
+            }
+        }
+
+        Expr struct_type = expr_copy(*expr.data.pack.type);
+
+        // Determine which fields are depended upon
+        bool field_depended_upon[struct_type.data.struct_.num_fields];
+        for (size_t i = 0; i < struct_type.data.struct_.num_fields; i++) {
+            size_t num_free[1];
+            const char **free_vars[1];
+            expr_free_vars(struct_type.data.struct_.field_types[i],
+                num_free, free_vars);
+
+            field_depended_upon[i] = 0;
+            for (size_t j = 0; j < i; j++) {
+                if (symbol_set_contains(num_free, free_vars,
+                        struct_type.data.struct_.field_names[j])) {
+                    field_depended_upon[j] = true;
+                }
+            }
+        }
+
+        // Ensure that depended upon fields are assigned
+        size_t depended_upon_assign_num[struct_type.data.struct_.num_fields];
+        for (size_t i = 0; i < struct_type.data.struct_.num_fields; i++) {
+            if (field_depended_upon[i]) {
+                bool field_assigned = false;
+
+                for (size_t j = 0; j < expr.data.pack.num_assigns; j++) {
+                    if (struct_type.data.struct_.field_names[i]
+                            == expr.data.pack.field_names[j]) {
+                        field_assigned = true;
+                        depended_upon_assign_num[i] = j;
+                        break;
+                    }
+                }
+
+                if (!field_assigned) {
+                    fprintf(stderr, "Depended-upon field \"%s\" not assigned "
+                        "in packed expression.\n",
+                        struct_type.data.struct_.field_names[i]);
+                    expr_free(struct_type);
+                    return false;
+                }
+            }
+        }
+
+        // Substitute dependent field types for their assigned values
+        for (size_t i = 0; i < struct_type.data.struct_.num_fields; i++) {
+            if (field_depended_upon[i]) {
+                for (size_t j = i + 1; j < struct_type.data.struct_.num_fields;
+                        j++) {
+                    if (!expr_subst(context,
+                            &struct_type.data.struct_.field_types[j],
+                            struct_type.data.struct_.field_names[i],
+                            expr.data.pack.assigns[
+                                depended_upon_assign_num[i]])) {
+                        expr_free(struct_type);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // Check that each assignment is of the correct type
+        // (Also check that each assignment is to an existing field name)
+        for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
+            bool valid_field = false;
+
+            for (size_t j = 0; j < struct_type.data.struct_.num_fields; j++) {
+                if (expr.data.pack.field_names[i]
+                        == struct_type.data.struct_.field_names[j]) {
+                    if (type_check(context, expr.data.pack.assigns[i],
+                            struct_type.data.struct_.field_types[j])) {
+                        valid_field = true;
+                        break;
+                    } else {
+                        expr_free(struct_type);
+                        return false;
+                    }
+                }
+            }
+
+            if (!valid_field) {
+                fprintf(stderr, "Assigning to field \"%s\" which does not "
+                    "exist in the struct.\n", expr.data.pack.field_names[i]);
+                expr_free(struct_type);
+                return false;
+            }
+        }
+
+        *result = struct_type;
+        return true;
+
+    } else if (expr.data.pack.type->tag == EXPR_UNION) {
+        // Check that there is exactly one assignment
+        if (expr.data.pack.num_assigns != 1) {
+            fprintf(stderr, "Must assign exactly one field in a union.\n");
+            return false;
+        }
+
+        // Check that that one assignment is to an existing field in the type
+        size_t union_field_chosen;
+        bool valid_field_chosen = false;
+        for (size_t i = 0; i < expr.data.pack.type->data.union_.num_fields; i++) {
+            if (expr.data.pack.type->data.union_.field_names[i]
+                    == expr.data.pack.field_names[0]) {
+                union_field_chosen = i;
+                valid_field_chosen = true;
+                break;
+            }
+        }
+        if (!valid_field_chosen) {
+            fprintf(stderr, "Assigning to field \"%s\" which does not exist "
+                "in the union.\n", expr.data.pack.field_names[0]);
+            return false;
+        }
+
+        // Check that assignment is of correct type
+        if (type_check(context, expr.data.pack.assigns[0],
+                expr.data.pack.type->data.union_.field_types[
+                    union_field_chosen])) {
+            *result = expr_copy(*expr.data.pack.type);
+            return true;
+        } else {
+            return false;
+        }
+
+    } else {
+
+        fprintf(stderr, "Cannot pack into non-struct and non-union type (");
+        expr_pprint(stderr, 0, *expr.data.pack.type);
+        fprintf(stderr, ").\n");
+
+        return false;
+    }
+}
+
+static bool type_infer_member(Context *context, Expr expr, Expr *result) {
+    assert(expr.tag == EXPR_MEMBER);
+    Expr record_type;
+
+    if (!type_infer(context, *expr.data.member.record, &record_type)) {
+        return false;
+    }
+
+    if (record_type.tag == EXPR_STRUCT) {
+        // TODO: in the case that this is a dependent field being accessed we
+        // need to substitute all field names X for (record).X. However,
+        // evaluating record may result in side effects so we can't do that
+        // directly. Instead we'll need to do something like
+        //   let fresh_var = record in
+        //   let X = fresh_var.X in
+        //   let Y = fresh_var.Y in
+        //   ... so on for all depended upon fields ...
+        //   typeof( fresh_var.field_being_accessed )
+        // We don't have a a let expression at the moment, so this will just
+        // not work for now.
+
+        for (size_t i = 0; i < record_type.data.struct_.num_fields; i++) {
+            if (record_type.data.struct_.field_names[i]
+                    == expr.data.member.field) {
+                *result = expr_copy(record_type.data.struct_.field_types[i]);
+                expr_free(record_type);
+                return true;
+            }
+        }
+
+        fprintf(stderr, "Accessing field \"%s\" which does not exist in "
+            "struct type (", expr.data.member.field);
+        expr_pprint(stderr, 0, record_type);
+        fprintf(stderr, ").\n");
+        expr_free(record_type);
+        return false;
+
+    } else if (record_type.tag == EXPR_UNION) {
+        for (size_t i = 0; i < record_type.data.union_.num_fields; i++) {
+            if (record_type.data.union_.field_names[i]
+                    == expr.data.member.field) {
+                *result = expr_copy(record_type.data.union_.field_types[i]);
+                expr_free(record_type);
+                return true;
+            }
+        }
+
+        fprintf(stderr, "Accessing field \"%s\" which does not exist in "
+            "union type (", expr.data.member.field);
+        expr_pprint(stderr, 0, record_type);
+        fprintf(stderr, ").\n");
+        expr_free(record_type);
+        return false;
+
+    } else {
+        fprintf(stderr, "Non-struct and non-union type (");
+        expr_pprint(stderr, 0, record_type);
+        fprintf(stderr, ") does not have field \"%s\".\n",
+            expr.data.member.field);
+        expr_free(record_type);
+        return false;
+    }
+}
+
+bool type_infer(Context *context, Expr expr, Expr *result) {
+    Expr temp;
+
+    switch (expr.tag) {
+      case EXPR_LITERAL:
+        return type_infer_literal(context, expr.data.literal, result);
+
+      case EXPR_IDENT:
+        if (!symbol_table_lookup(&context->symbol_table,
+                expr.data.ident, &temp)) {
+            return false;
+        }
+        *result = expr_copy(temp);
+        return true;
+
+      case EXPR_FUNC_TYPE:
+        return type_infer_func_type(context, expr, result);
+
+      case EXPR_CALL:
+        return type_infer_call(context, expr, result);
+
+      case EXPR_STRUCT:
+        return type_infer_struct(context, expr, result);
+
+      case EXPR_UNION:
+        for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
+            for (size_t j = i + 1; j < expr.data.union_.num_fields; j++) {
+                if (expr.data.union_.field_names[i]
+                        == expr.data.union_.field_names[j]) {
+                    fprintf(stderr, "Union declares field \"%s\" multiple "
+                        "times.\n", expr.data.union_.field_names[i]);
+                    return false;
+                }
+            }
+        }
+        for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
+            if (!type_check(context, expr.data.union_.field_types[i],
+                    literal_expr_type)) {
+                return false;
+            }
+        }
+        *result = literal_expr_type;
+        return true;
+
+      case EXPR_PACK:
+        return type_infer_pack(context, expr, result);
+
+      case EXPR_MEMBER:
+        return type_infer_member(context, expr, result);
+
+      case EXPR_POINTER:
+        if (!type_check(context, *expr.data.pointer, literal_expr_type)) {
+            return false;
+        }
+        *result = literal_expr_type;
+        return true;
+
+      case EXPR_REFERENCE:
+        if (!type_infer(context, *expr.data.reference, &temp)) {
+            return false;
+        }
+        result->tag = EXPR_POINTER;
+        result->data.pointer = malloc(sizeof temp);
+        *result->data.pointer = temp;
+        return true;
+
+      case EXPR_DEREFERENCE:
+        if (!type_infer(context, *expr.data.dereference, &temp)) {
+            return false;
+        }
+        if (temp.tag != EXPR_POINTER) {
+            return false;
+        }
+        *result = expr_copy(*temp.data.pointer);
+        expr_free(temp);
+        return true;
+    }
+}
+
+bool type_equal(Context *context, Expr type1, Expr type2) {
+    // TODO, do normalization and alpha equivalence rather than simple
+    // structural equivalence.
+
+    return expr_equal(type1, type2);
 }

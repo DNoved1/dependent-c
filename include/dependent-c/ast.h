@@ -96,6 +96,13 @@ struct Expr {
     } data;
 };
 
+/* Since this will be used fairly often we'll just go ahead and define it here.*/
+#define literal_expr_type \
+    ((Expr){ \
+          .tag = EXPR_LITERAL \
+        , .data.literal = (Literal){.tag = LIT_TYPE} \
+    })
+
 /***** Statements ************************************************************/
 typedef enum {
       STATEMENT_EMPTY
@@ -160,6 +167,16 @@ bool expr_equal(Expr x, Expr y);
 
 /* Make a deep copy of an expression. */
 Expr expr_copy(Expr x);
+
+/* Calculate the set of free variables in an expression. */
+void expr_free_vars(Expr expr, size_t *num_free, const char ***free);
+
+// Cyclical include problems...
+#include "dependent-c/general.h"
+
+/* Substitute a variable in an expression for an expression. */
+bool expr_subst(Context *context, Expr *expr,
+    const char *name, Expr replacement);
 
 /* Free any resources associated with an expression. */
 void statement_free(Statement statement);

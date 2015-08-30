@@ -3,3 +3,7 @@
   bootstrapped, as polymorphism will make returning Maybe(T) values a lot
   easier, among other things.
 * Dependent types rather than simply system f-omega.
+* Require that depended-upon fields in structs be const since mutating them
+  can change the size of the struct and invalidate and dependent fields. Maybe
+  make an exception if the dependency is behind a pointer since it will prevent
+  the first problem at least.

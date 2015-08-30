@@ -1,9 +1,12 @@
+#include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "dependent-c/ast.h"
+#include "dependent-c/general.h"
+#include "dependent-c/symbol_table.h"
 
 /***** Expression Management *************************************************/
 static bool literal_equal(Literal x, Literal y) {
@@ -246,6 +249,291 @@ Expr expr_copy(Expr x) {
     }
 
     return y;
+}
+
+void expr_free_vars(Expr expr, size_t *num_free, const char ***free) {
+    size_t num_free_temp[1];
+    const char **free_temp[1];
+
+    switch (expr.tag) {
+      case EXPR_LITERAL:
+        *num_free = 0;
+        *free = NULL;
+        break;
+
+      case EXPR_IDENT:
+        *num_free = 1;
+        *free = malloc(sizeof **free);
+        **free = expr.data.ident;
+        break;
+
+      case EXPR_FUNC_TYPE:
+        expr_free_vars(*expr.data.func_type.ret_type, num_free, free);
+        for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
+            if (expr.data.func_type.param_names[i] != NULL) {
+                symbol_set_delete(num_free, free,
+                    expr.data.func_type.param_names[i]);
+            }
+        }
+        for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
+            expr_free_vars(expr.data.func_type.param_types[i],
+                num_free_temp, free_temp);
+            for (size_t j = 0; j < i; j++) {
+                if (expr.data.func_type.param_names[j] != NULL) {
+                    symbol_set_delete(num_free_temp, free_temp,
+                        expr.data.func_type.param_names[j]);
+                }
+            }
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+        }
+        break;
+
+      case EXPR_CALL:
+        expr_free_vars(*expr.data.call.func, num_free, free);
+        for (size_t i = 0; i < expr.data.call.num_args; i++) {
+            expr_free_vars(expr.data.call.args[i], num_free_temp, free_temp);
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+        }
+        break;
+
+      case EXPR_STRUCT:
+        *num_free = 0;
+        *free = NULL;
+        for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
+            expr_free_vars(expr.data.struct_.field_types[i],
+                num_free_temp, free_temp);
+            for (size_t j = 0; j < i; j++) {
+                symbol_set_delete(num_free_temp, free_temp,
+                    expr.data.struct_.field_names[j]);
+            }
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+        }
+        break;
+
+      case EXPR_UNION:
+        *num_free = 0;
+        *free = NULL;
+        for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
+            expr_free_vars(expr.data.union_.field_types[i],
+                num_free_temp, free_temp);
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+        }
+        break;
+
+      case EXPR_PACK:
+        expr_free_vars(*expr.data.pack.type, num_free, free);
+        for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
+            expr_free_vars(expr.data.pack.assigns[i],
+                num_free_temp, free_temp);
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+        }
+        break;
+
+      case EXPR_MEMBER:
+        expr_free_vars(*expr.data.member.record, num_free, free);
+        break;
+
+      case EXPR_POINTER:
+        expr_free_vars(*expr.data.pointer, num_free, free);
+        break;
+
+      case EXPR_REFERENCE:
+        expr_free_vars(*expr.data.reference, num_free, free);
+        break;
+
+      case EXPR_DEREFERENCE:
+        expr_free_vars(*expr.data.dereference, num_free, free);
+        break;
+    }
+}
+
+static bool expr_func_type_subst(Context *context, Expr *expr, const char *name,
+        Expr replacement) {
+    assert(expr->tag == EXPR_FUNC_TYPE);
+    bool ret_val = false;
+
+    size_t num_free;
+    const char **free_vars;
+    expr_free_vars(replacement, &num_free, &free_vars);
+
+    for (size_t i = 0; i < expr->data.func_type.num_params; i++) {
+        if (!expr_subst(context, &expr->data.func_type.param_types[i],
+                name, replacement)) {
+            goto end_of_function;
+        }
+        const char *old_param_name = expr->data.func_type.param_names[i];
+
+        if (old_param_name != NULL) {
+            if (old_param_name == name) {
+                ret_val = true;
+                goto end_of_function;
+            }
+
+            if (symbol_set_contains(&num_free, &free_vars,
+                    old_param_name)) {
+                const char *new_param_name = symbol_gensym(&context->interns,
+                    old_param_name);
+                Expr new_replacement = (Expr){
+                      .tag = EXPR_IDENT
+                    , .data.ident = new_param_name
+                };
+                expr->data.func_type.param_names[i] = new_param_name;
+
+                for (size_t j = i + 1; j < expr->data.func_type.num_params; j++) {
+                    if (!expr_subst(context,
+                            &expr->data.func_type.param_types[i],
+                            old_param_name, new_replacement)) {
+                        goto end_of_function;
+                    }
+                }
+                if (!expr_subst(context, expr->data.func_type.ret_type,
+                        old_param_name, new_replacement)) {
+                    goto end_of_function;
+                }
+            }
+        }
+    }
+    if (!expr_subst(context, expr->data.func_type.ret_type, name, replacement)) {
+        goto end_of_function;
+    }
+
+    ret_val = true;
+
+end_of_function:
+    free(free_vars);
+    return ret_val;
+}
+
+static bool expr_struct_subst(Context *context, Expr *expr, const char *name,
+        Expr replacement) {
+    assert(expr->tag == EXPR_STRUCT);
+    bool ret_val = false;
+
+    size_t num_free;
+    const char **free_vars;
+    expr_free_vars(replacement, &num_free, &free_vars);
+
+    for (size_t i = 0; i < expr->data.struct_.num_fields; i++) {
+        if (!expr_subst(context, &expr->data.struct_.field_types[i],
+                name, replacement)) {
+            goto end_of_function;
+        }
+        const char *old_field_name = expr->data.struct_.field_names[i];
+
+        if (old_field_name == name) {
+            ret_val = true;
+            goto end_of_function;
+        }
+
+        if (symbol_set_contains(&num_free, &free_vars, old_field_name)) {
+            goto end_of_function;
+        }
+    }
+
+    ret_val = true;
+
+end_of_function:
+    free(free_vars);
+    return ret_val;
+}
+
+// This one's a bit weird since a pack could either be a struct or a union.
+// In the case of a union we should ignore the field names entirely and just
+// substitute through all assignments. In the case of a struct we need to look
+// at field names to see if there is shadowing or capturing going on.
+//
+// Problem is, we don't know whether we're dealing with a struct or union here.
+//
+// Solution: Since unions *should* only have one assignment, use the struct
+// algorithm, which coincides with the union one when only one field is being
+// assigned. When type checking we should ensure that this in indeed the case
+// by making sure union packings have exactly one assignment.
+static bool expr_pack_subst(Context *context, Expr *expr, const char *name,
+        Expr replacement) {
+    assert(expr->tag == EXPR_PACK);
+    bool ret_val = false;
+
+    size_t num_free;
+    const char **free_vars;
+    expr_free_vars(replacement, &num_free, &free_vars);
+
+    for (size_t i = 0; i < expr->data.pack.num_assigns; i++) {
+        if (!expr_subst(context, &expr->data.pack.assigns[i],
+                name, replacement)) {
+            goto end_of_function;
+        }
+        const char *old_field_name = expr->data.pack.field_names[i];
+
+        if (old_field_name == name) {
+            ret_val = true;
+            goto end_of_function;
+        }
+
+        if (symbol_set_contains(&num_free, &free_vars, old_field_name)) {
+            goto end_of_function;
+        }
+    }
+
+    ret_val = true;
+
+end_of_function:
+    free(free_vars);
+    return ret_val;
+}
+
+bool expr_subst(Context *context, Expr *expr,
+        const char *name, Expr replacement) {
+    switch (expr->tag) {
+      case EXPR_LITERAL:
+        return true;
+
+      case EXPR_IDENT:
+        expr_free(*expr);
+        *expr = expr_copy(replacement);
+        return true;
+
+      case EXPR_FUNC_TYPE:
+        return expr_func_type_subst(context, expr, name, replacement);
+
+      case EXPR_CALL:
+        if (!expr_subst(context, expr->data.call.func, name, replacement)) {
+            return false;
+        }
+        for (size_t i = 0; i < expr->data.call.num_args; i++) {
+            if (!expr_subst(context, &expr->data.call.args[i],
+                    name, replacement)) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_STRUCT:
+        return expr_struct_subst(context, expr, name, replacement);
+
+      case EXPR_UNION:
+        for (size_t i = 0; i < expr->data.union_.num_fields; i++) {
+            if (!expr_subst(context, &expr->data.union_.field_types[i],
+                    name, replacement)) {
+                return false;
+            }
+        }
+        return true;
+
+      case EXPR_PACK:
+        return expr_pack_subst(context, expr, name, replacement);
+
+      case EXPR_MEMBER:
+        return expr_subst(context, expr->data.member.record, name, replacement);
+
+      case EXPR_POINTER:
+        return expr_subst(context, expr->data.pointer, name, replacement);
+
+      case EXPR_REFERENCE:
+        return expr_subst(context, expr->data.reference, name, replacement);
+
+      case EXPR_DEREFERENCE:
+        return expr_subst(context, expr->data.dereference, name, replacement);
+    }
 }
 
 /***** Freeing ast nodes *****************************************************/
