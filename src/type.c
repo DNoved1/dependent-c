@@ -285,7 +285,7 @@ static bool type_infer_struct(Context *context, Expr expr, Expr *result) {
     for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
         for (size_t j = i + 1; j < expr.data.struct_.num_fields; j++) {
             if (expr.data.struct_.field_names[i]
-                    == expr.data.struct_.field_names[i]) {
+                    == expr.data.struct_.field_names[j]) {
                 fprintf(stderr, "Structure declares field \"%s\" multiple "
                     "times.\n", expr.data.struct_.field_names[i]);
                 return false;

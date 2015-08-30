@@ -259,7 +259,7 @@ type_ident_list:
         $$ = $1;
         $$.types = realloc($$.types, ($$.len + 1) * sizeof *$$.types);
         $$.types[$$.len] = $2.type;
-        $$.idents = realloc($$.types, ($$.len + 1) * sizeof *$$.idents);
+        $$.idents = realloc($$.idents, ($$.len + 1) * sizeof *$$.idents);
         $$.idents[$$.len] = $2.ident;
         $$.len += 1; }
     ;
