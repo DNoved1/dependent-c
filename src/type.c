@@ -160,7 +160,7 @@ bool type_check(Context *context, Expr expr, Expr type) {
     }
 
     bool ret_val = type_equal(context, type, type2);
-    expr_free(type2);
+    expr_free(&type2);
     return ret_val;
 }
 
@@ -234,7 +234,7 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
         expr_pprint(stderr, 0, func_type);
         fprintf(stderr, ").\n");
 
-        expr_free(func_type);
+        expr_free(&func_type);
         return false;
     }
 
@@ -243,7 +243,7 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
             "%zu arguments.\n", func_type.data.func_type.num_params,
             expr.data.call.num_args);
 
-        expr_free(func_type);
+        expr_free(&func_type);
         return false;
     }
 
@@ -256,24 +256,24 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
                 if (!expr_subst(context,
                         &func_type.data.func_type.param_types[j],
                         param_name, arg)) {
-                    expr_free(func_type);
+                    expr_free(&func_type);
                     return false;
                 }
             }
 
             if (!expr_subst(context, func_type.data.func_type.ret_type,
                     param_name, arg)) {
-                expr_free(func_type);
+                expr_free(&func_type);
                 return false;
             }
         } else {
-            expr_free(func_type);
+            expr_free(&func_type);
             return false;
         }
     }
 
     *result = expr_copy(*func_type.data.func_type.ret_type);
-    expr_free(func_type);
+    expr_free(&func_type);
     return true;
 }
 
@@ -368,7 +368,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
                     fprintf(stderr, "Depended-upon field \"%s\" not assigned "
                         "in packed expression.\n",
                         struct_type.data.struct_.field_names[i]);
-                    expr_free(struct_type);
+                    expr_free(&struct_type);
                     return false;
                 }
             }
@@ -384,7 +384,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
                             struct_type.data.struct_.field_names[i],
                             expr.data.pack.assigns[
                                 depended_upon_assign_num[i]])) {
-                        expr_free(struct_type);
+                        expr_free(&struct_type);
                         return false;
                     }
                 }
@@ -404,7 +404,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
                         valid_field = true;
                         break;
                     } else {
-                        expr_free(struct_type);
+                        expr_free(&struct_type);
                         return false;
                     }
                 }
@@ -413,7 +413,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
             if (!valid_field) {
                 fprintf(stderr, "Assigning to field \"%s\" which does not "
                     "exist in the struct.\n", expr.data.pack.field_names[i]);
-                expr_free(struct_type);
+                expr_free(&struct_type);
                 return false;
             }
         }
@@ -490,7 +490,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
             if (record_type.data.struct_.field_names[i]
                     == expr.data.member.field) {
                 *result = expr_copy(record_type.data.struct_.field_types[i]);
-                expr_free(record_type);
+                expr_free(&record_type);
                 return true;
             }
         }
@@ -499,7 +499,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
             "struct type (", expr.data.member.field);
         expr_pprint(stderr, 0, record_type);
         fprintf(stderr, ").\n");
-        expr_free(record_type);
+        expr_free(&record_type);
         return false;
 
     } else if (record_type.tag == EXPR_UNION) {
@@ -507,7 +507,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
             if (record_type.data.union_.field_names[i]
                     == expr.data.member.field) {
                 *result = expr_copy(record_type.data.union_.field_types[i]);
-                expr_free(record_type);
+                expr_free(&record_type);
                 return true;
             }
         }
@@ -516,7 +516,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
             "union type (", expr.data.member.field);
         expr_pprint(stderr, 0, record_type);
         fprintf(stderr, ").\n");
-        expr_free(record_type);
+        expr_free(&record_type);
         return false;
 
     } else {
@@ -524,7 +524,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
         expr_pprint(stderr, 0, record_type);
         fprintf(stderr, ") does not have field \"%s\".\n",
             expr.data.member.field);
-        expr_free(record_type);
+        expr_free(&record_type);
         return false;
     }
 }
@@ -603,7 +603,7 @@ bool type_infer(Context *context, Expr expr, Expr *result) {
             return false;
         }
         *result = expr_copy(*temp.data.pointer);
-        expr_free(temp);
+        expr_free(&temp);
         return true;
     }
 }
@@ -635,7 +635,7 @@ static bool type_check_statement(Context *context, Statement statement) {
         if (!type_infer(context, statement.data.expr, &temp)) {
             return false;
         }
-        expr_free(temp);
+        expr_free(&temp);
         return true;
 
       case STATEMENT_BLOCK:
