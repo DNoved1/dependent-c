@@ -64,6 +64,12 @@
         size_t len;
         Statement *statements;
     } statement_list;
+
+    struct {
+        size_t len;
+        Expr *ifs;
+        Block *thens;
+    } if_list;
 }
 
 %{
@@ -82,9 +88,14 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_S32      "s32"
 %token TOK_U64      "u64"
 %token TOK_S64      "s64"
+%token TOK_BOOL     "bool"
+%token TOK_TRUE     "true"
+%token TOK_FALSE    "false"
 %token TOK_STRUCT   "struct"
 %token TOK_UNION    "union"
 %token TOK_RETURN   "return"
+%token TOK_IF       "if"
+%token TOK_ELSE     "else"
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -96,6 +107,8 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %type <literal> literal
 %type <expr> simple_expr postfix_expr prefix_expr expr
 %type <statement> statement
+%type <if_list> else_if_parts
+%type <statement_list> else_part
 %type <top_level> top_level
 %type <unit> translation_unit
 
@@ -129,6 +142,9 @@ literal:
     | "s32"         { $$.tag = LIT_S32;                                       }
     | "u64"         { $$.tag = LIT_U64;                                       }
     | "s64"         { $$.tag = LIT_S64;                                       }
+    | "bool"        { $$.tag = LIT_BOOL;                                      }
+    | "true"        { $$.tag = LIT_BOOLEAN; $$.data.boolean = true;           }
+    | "false"       { $$.tag = LIT_BOOLEAN; $$.data.boolean = false;          }
     | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.data.integral = $1;           }
     ;
 
@@ -226,6 +242,43 @@ statement:
         $$.data.decl.name = $2;
         $$.data.decl.is_initialized = true;
         $$.data.decl.initial_value = $4; }
+    | "if" '(' expr ')' block else_if_parts else_part {
+        $$.tag = STATEMENT_IFTHENELSE;
+        $$.data.ifthenelse.ifs = realloc($6.ifs,
+            ($6.len + 1) * sizeof *$$.data.ifthenelse.ifs);
+        memmove(&$$.data.ifthenelse.ifs[1], &$$.data.ifthenelse.ifs[0],
+            $6.len * sizeof *$$.data.ifthenelse.ifs);
+        $$.data.ifthenelse.ifs[0] = $3;
+        $$.data.ifthenelse.thens = realloc($6.thens,
+            ($6.len + 1) * sizeof *$$.data.ifthenelse.thens);
+        $$.data.ifthenelse.thens[0].num_statements = $5.len;
+        $$.data.ifthenelse.thens[0].statements = $5.statements;
+        $$.data.ifthenelse.else_.num_statements = $7.len;
+        $$.data.ifthenelse.else_.statements = $7.statements;
+        $$.data.ifthenelse.num_ifs = $6.len + 1; }
+    ;
+
+else_if_parts:
+      %empty {
+        $$.len = 0;
+        $$.ifs = NULL;
+        $$.thens = NULL; }
+    | else_if_parts "else" "if" '(' expr ')' block {
+        $$ = $1;
+        $$.ifs = realloc($$.ifs, ($$.len + 1) * sizeof *$$.ifs);
+        $$.ifs[$$.len] = $5;
+        $$.thens = realloc($$.thens, ($$.len + 1) * sizeof *$$.thens);
+        $$.thens[$$.len].num_statements = $7.len;
+        $$.thens[$$.len].statements = $7.statements;
+        $$.len += 1; }
+    ;
+
+else_part:
+      %empty {
+        $$.len = 0;
+        $$.statements = NULL; }
+    | "else" block {
+        $$ = $2; }
     ;
 
 top_level:
@@ -451,9 +504,14 @@ start_of_function:;
         check_is_reserved(s32,      TOK_S32)
         check_is_reserved(u64,      TOK_U64)
         check_is_reserved(s64,      TOK_S64)
+        check_is_reserved(bool,     TOK_BOOL)
+        check_is_reserved(true,     TOK_TRUE)
+        check_is_reserved(false,    TOK_FALSE)
         check_is_reserved(struct,   TOK_STRUCT)
         check_is_reserved(union,    TOK_UNION)
         check_is_reserved(return,   TOK_RETURN)
+        check_is_reserved(if,       TOK_IF)
+        check_is_reserved(else,     TOK_ELSE)
         else {
             const char *interned_ident = symbol_intern(&context->interns, ident);
             lval->ident = interned_ident;

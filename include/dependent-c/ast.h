@@ -16,14 +16,18 @@ typedef enum {
     , LIT_U16,      LIT_S16
     , LIT_U32,      LIT_S32
     , LIT_U64,      LIT_S64
+    , LIT_BOOL
     // Literal integers
     , LIT_INTEGRAL
+    // Literal boolean values (true & false)
+    , LIT_BOOLEAN
 } LiteralTag;
 
 typedef struct {
     LiteralTag tag;
     union {
         uint64_t integral;
+        bool boolean;
     } data;
 } Literal;
 
@@ -103,6 +107,12 @@ struct Expr {
         , .data.literal = (Literal){.tag = LIT_TYPE} \
     })
 
+#define literal_expr_bool \
+    ((Expr){ \
+          .tag = EXPR_LITERAL \
+        , .data.literal = (Literal){.tag = LIT_BOOL} \
+    })
+
 /***** Statements ************************************************************/
 typedef enum {
       STATEMENT_EMPTY
@@ -110,18 +120,22 @@ typedef enum {
     , STATEMENT_RETURN
     , STATEMENT_BLOCK
     , STATEMENT_DECL
+    , STATEMENT_IFTHENELSE
 } StatementTag;
 
 typedef struct Statement Statement;
+
+typedef struct {
+    size_t num_statements;
+    Statement *statements;
+} Block;
+
 struct Statement {
     StatementTag tag;
     union {
         Expr expr;
 
-        struct {
-            size_t num_statements;
-            Statement *statements;
-        } block;
+        Block block;
 
         struct {
             Expr type;
@@ -129,6 +143,13 @@ struct Statement {
             bool is_initialized;
             Expr initial_value;
         } decl;
+
+        struct {
+            size_t num_ifs;
+            Expr *ifs;
+            Block *thens;
+            Block else_;
+        } ifthenelse;
     } data;
 };
 
@@ -182,6 +203,8 @@ bool expr_subst(Context *context, Expr *expr,
 /* Free any resources associated with an expression. */
 void statement_free(Statement *statement);
 void statement_pprint(FILE *to, int nesting, Statement statement);
+
+void block_free(Block *block);
 
 /* Free any resources associated with a top level definition. */
 void top_level_free(TopLevel *top_level);

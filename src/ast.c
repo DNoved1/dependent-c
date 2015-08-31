@@ -26,10 +26,14 @@ static bool literal_equal(Literal x, Literal y) {
       case LIT_S32:
       case LIT_U64:
       case LIT_S64:
+      case LIT_BOOL:
         return true;
 
       case LIT_INTEGRAL:
         return x.data.integral == y.data.integral;
+
+      case LIT_BOOLEAN:
+        return x.data.boolean == y.data.boolean;
     }
 }
 
@@ -144,7 +148,9 @@ static Literal literal_copy(Literal x) {
       case LIT_S32:
       case LIT_U64:
       case LIT_S64:
+      case LIT_BOOL:
       case LIT_INTEGRAL:
+      case LIT_BOOLEAN:
         return x;
     }
 }
@@ -635,8 +641,26 @@ void statement_free(Statement *statement) {
             expr_free(&statement->data.decl.initial_value);
         }
         break;
+
+      case STATEMENT_IFTHENELSE:
+        for (size_t i = 0; i < statement->data.ifthenelse.num_ifs; i++) {
+            expr_free(&statement->data.ifthenelse.ifs[i]);
+            block_free(&statement->data.ifthenelse.thens[i]);
+        }
+        free(statement->data.ifthenelse.ifs);
+        free(statement->data.ifthenelse.thens);
+        block_free(&statement->data.ifthenelse.else_);
+        break;
     }
     memset(statement, 0, sizeof *statement);
+}
+
+void block_free(Block *block) {
+    for (size_t i = 0; i < block->num_statements; i++) {
+        statement_free(&block->statements[i]);
+    }
+    free(block->statements);
+    memset(block, 0, sizeof *block);
 }
 
 void top_level_free(TopLevel *top_level) {
@@ -686,9 +710,14 @@ static void literal_pprint(FILE *to, int nesting, Literal literal) {
       tag_to_string(LIT_S32, "s32")
       tag_to_string(LIT_U64, "u64")
       tag_to_string(LIT_S64, "s64")
+      tag_to_string(LIT_BOOL, "bool")
 
       case LIT_INTEGRAL:
         fprintf(to, "%" PRIu64, literal.data.integral);
+        break;
+
+      case LIT_BOOLEAN:
+        fprintf(to, literal.data.boolean ? "true" : "false");
         break;
     }
 
@@ -794,6 +823,12 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
     }
 }
 
+static void block_pprint(FILE *to, int nesting, Block block) {
+    for (size_t i = 0; i < block.num_statements; i++) {
+        statement_pprint(to, nesting, block.statements[i]);
+    }
+}
+
 void statement_pprint(FILE *to, int nesting, Statement statement) {
     print_indentation_whitespace(to, nesting);
 
@@ -829,6 +864,24 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
             expr_pprint(to, nesting, statement.data.decl.initial_value);
         }
         fprintf(to, ";\n");
+        break;
+
+      case STATEMENT_IFTHENELSE:
+        for (size_t i = 0; i < statement.data.ifthenelse.num_ifs; i++) {
+            if (i != 0) {
+                print_indentation_whitespace(to, nesting);
+                fprintf(to, "} else ");
+            }
+            fprintf(to, "if (");
+            expr_pprint(to, nesting, statement.data.ifthenelse.ifs[i]);
+            fprintf(to, ") {\n");
+            block_pprint(to, nesting + 1, statement.data.ifthenelse.thens[i]);
+        }
+        print_indentation_whitespace(to, nesting);
+        fprintf(to, "} else {\n");
+        block_pprint(to, nesting + 1, statement.data.ifthenelse.else_);
+        print_indentation_whitespace(to, nesting);
+        fprintf(to, "}\n");
         break;
     }
 }

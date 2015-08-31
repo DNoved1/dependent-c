@@ -44,6 +44,19 @@ static void statement_free_vars(Statement statement,
             symbol_set_union(num_free, free, num_free_temp, free_temp);
         }
         break;
+
+      case STATEMENT_IFTHENELSE:
+        block_free_vars(statement.data.ifthenelse.else_.num_statements,
+            statement.data.ifthenelse.else_.statements, num_free, free);
+        for (size_t i = 0; i < statement.data.ifthenelse.num_ifs; i++) {
+            expr_free_vars(statement.data.ifthenelse.ifs[i],
+                num_free_temp, free_temp);
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            block_free_vars(statement.data.ifthenelse.thens[i].num_statements,
+                statement.data.ifthenelse.thens[i].statements, num_free, free);
+            symbol_set_union(num_free, free, num_free_temp, free_temp);
+        }
+        break;
     }
 }
 
@@ -66,6 +79,7 @@ static void block_free_vars(size_t len, Statement block[len],
           case STATEMENT_EXPR:
           case STATEMENT_RETURN:
           case STATEMENT_BLOCK:
+          case STATEMENT_IFTHENELSE:
             break;
         }
 
@@ -179,6 +193,7 @@ static bool type_infer_literal(Context *context, Literal literal,
       case LIT_S32:
       case LIT_U64:
       case LIT_S64:
+      case LIT_BOOL:
         *result = literal_expr_type;
         return true;
 
@@ -187,6 +202,10 @@ static bool type_infer_literal(Context *context, Literal literal,
               .tag = EXPR_LITERAL
             , .data.literal = (Literal){.tag = LIT_U64}
         };
+        return true;
+
+      case LIT_BOOLEAN:
+        *result = literal_expr_bool;
         return true;
     }
 }
@@ -627,6 +646,29 @@ bool type_equal(Context *context, Expr type1, Expr type2) {
 }
 
 static bool type_check_statement(Context *context, Statement statement,
+    Expr ret_type, bool *returns);
+
+static bool type_check_block(Context *context, Block block, Expr ret_type,
+        bool *returns) {
+    *returns = false;
+    bool returns_temp;
+
+    for (size_t i = 0; i < block.num_statements; i++) {
+        if (!type_check_statement(context, block.statements[i],
+                ret_type, &returns_temp)) {
+            return false;
+        }
+
+        *returns |= returns_temp;
+        if (returns_temp && i != block.num_statements - 1) {
+            fprintf(stderr, "Warning: Dead code.\n");
+        }
+    }
+
+    return true;
+}
+
+static bool type_check_statement(Context *context, Statement statement,
         Expr ret_type, bool *returns) {
     Expr temp;
     *returns = false;
@@ -649,17 +691,10 @@ static bool type_check_statement(Context *context, Statement statement,
 
       case STATEMENT_BLOCK:
         symbol_table_enter_scope(&context->symbol_table);
-        for (size_t i = 0; i < statement.data.block.num_statements; i++) {
-            if (!type_check_statement(context,
-                    statement.data.block.statements[i],
-                    ret_type, &returns_temp)) {
-                symbol_table_leave_scope(&context->symbol_table);
-                return false;
-            }
-            *returns |= returns_temp;
-            if (returns_temp && i != statement.data.block.num_statements - 1) {
-                fprintf(stderr, "Warning: Dead code.\n");
-            }
+        if (!type_check_block(context, statement.data.block,
+                ret_type, returns)) {
+            symbol_table_leave_scope(&context->symbol_table);
+            return false;
         }
         symbol_table_leave_scope(&context->symbol_table);
         return true;
@@ -676,6 +711,32 @@ static bool type_check_statement(Context *context, Statement statement,
         }
         symbol_table_register_local(&context->symbol_table,
             statement.data.decl.name, statement.data.decl.type);
+        return true;
+
+      case STATEMENT_IFTHENELSE:
+        *returns = true;
+        for (size_t i = 0; i < statement.data.ifthenelse.num_ifs; i++) {
+            if (!type_check(context, statement.data.ifthenelse.ifs[i],
+                    literal_expr_bool)) {
+                return false;
+            }
+            symbol_table_enter_scope(&context->symbol_table);
+            if (!type_check_block(context, statement.data.ifthenelse.thens[i],
+                    ret_type, &returns_temp)) {
+                symbol_table_leave_scope(&context->symbol_table);
+                return false;
+            }
+            symbol_table_leave_scope(&context->symbol_table);
+            *returns &= returns_temp;
+        }
+        symbol_table_enter_scope(&context->symbol_table);
+        if (!type_check_block(context, statement.data.ifthenelse.else_,
+                ret_type, &returns_temp)) {
+            symbol_table_leave_scope(&context->symbol_table);
+            return false;
+        }
+        symbol_table_leave_scope(&context->symbol_table);
+        *returns &= returns_temp;
         return true;
     }
 }
