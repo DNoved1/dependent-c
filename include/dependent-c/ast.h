@@ -33,9 +33,17 @@ typedef struct {
 
 /***** Expressions ***********************************************************/
 typedef enum {
+      BIN_OP_EQ
+    , BIN_OP_NE
+    , BIN_OP_ADD
+    , BIN_OP_SUB
+} BinaryOp;
+
+typedef enum {
     // Misc.
       EXPR_LITERAL
     , EXPR_IDENT
+    , EXPR_BIN_OP
 
     // Function type and destructor. Constructor is a declaration, not an
     // expression.
@@ -60,6 +68,11 @@ struct Expr {
     union {
         Literal literal;
         const char *ident;
+        struct {
+            BinaryOp op;
+            Expr *expr1;
+            Expr *expr2;
+        } bin_op;
 
         struct {
             Expr *ret_type;

@@ -49,6 +49,11 @@ bool expr_equal(Expr x, Expr y) {
       case EXPR_IDENT:
         return x.data.ident == y.data.ident;
 
+      case EXPR_BIN_OP:
+        return x.data.bin_op.op != y.data.bin_op.op
+            && expr_equal(*x.data.bin_op.expr1, *y.data.bin_op.expr1)
+            && expr_equal(*x.data.bin_op.expr2, *y.data.bin_op.expr2);
+
       case EXPR_FUNC_TYPE:
         if (!expr_equal(*x.data.func_type.ret_type, *y.data.func_type.ret_type)
                 || x.data.func_type.num_params != y.data.func_type.num_params) {
@@ -167,6 +172,14 @@ Expr expr_copy(Expr x) {
         y.data.ident = x.data.ident;
         break;
 
+      case EXPR_BIN_OP:
+        y.data.bin_op.op = x.data.bin_op.op;
+        y.data.bin_op.expr1 = malloc(sizeof *y.data.bin_op.expr1);
+        *y.data.bin_op.expr1 = expr_copy(*x.data.bin_op.expr1);
+        y.data.bin_op.expr2 = malloc(sizeof *y.data.bin_op.expr2);
+        *y.data.bin_op.expr2 = expr_copy(*x.data.bin_op.expr2);
+        break;
+
       case EXPR_FUNC_TYPE:
         y.data.func_type.ret_type = malloc(sizeof *y.data.func_type.ret_type);
         *y.data.func_type.ret_type = expr_copy(*x.data.func_type.ret_type);
@@ -272,6 +285,12 @@ void expr_free_vars(Expr expr, size_t *num_free, const char ***free) {
         *num_free = 1;
         *free = malloc(sizeof **free);
         **free = expr.data.ident;
+        break;
+
+      case EXPR_BIN_OP:
+        expr_free_vars(*expr.data.bin_op.expr1, num_free, free);
+        expr_free_vars(*expr.data.bin_op.expr2, num_free_temp, free_temp);
+        symbol_set_union(num_free, free, num_free_temp, free_temp);
         break;
 
       case EXPR_FUNC_TYPE:
@@ -499,6 +518,10 @@ bool expr_subst(Context *context, Expr *expr,
         *expr = expr_copy(replacement);
         return true;
 
+      case EXPR_BIN_OP:
+        return expr_subst(context, expr->data.bin_op.expr1, name, replacement)
+            && expr_subst(context, expr->data.bin_op.expr2, name, replacement);
+
       case EXPR_FUNC_TYPE:
         return expr_func_type_subst(context, expr, name, replacement);
 
@@ -548,6 +571,11 @@ void expr_free(Expr *expr) {
     switch (expr->tag) {
       case EXPR_LITERAL:
       case EXPR_IDENT:
+        break;
+
+      case EXPR_BIN_OP:
+        expr_free(expr->data.bin_op.expr1);
+        expr_free(expr->data.bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:
@@ -696,9 +724,8 @@ static void print_indentation_whitespace(FILE *to, int nesting) {
     }
 }
 
-static void literal_pprint(FILE *to, int nesting, Literal literal) {
 #define tag_to_string(tag, str) case tag: fprintf(to, str); break;
-
+static void literal_pprint(FILE *to, int nesting, Literal literal) {
     switch (literal.tag) {
       tag_to_string(LIT_TYPE, "type")
       tag_to_string(LIT_VOID, "void")
@@ -721,8 +748,17 @@ static void literal_pprint(FILE *to, int nesting, Literal literal) {
         break;
     }
 
-#undef tag_to_string
 }
+
+static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
+    switch (bin_op) {
+      tag_to_string(BIN_OP_EQ, "==")
+      tag_to_string(BIN_OP_NE, "!=")
+      tag_to_string(BIN_OP_ADD, "+")
+      tag_to_string(BIN_OP_SUB, "-")
+    }
+}
+#undef tag_to_string
 
 static void expr_pprint_(FILE *to, int nesting, Expr expr) {
     putc('(', to);
@@ -738,6 +774,12 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
 
       case EXPR_IDENT:
         fputs(expr.data.ident, to);
+        break;
+
+      case EXPR_BIN_OP:
+        expr_pprint_(to, nesting, *expr.data.bin_op.expr1);
+        bin_op_pprint(to, expr.data.bin_op.op);
+        expr_pprint_(to, nesting, *expr.data.bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:

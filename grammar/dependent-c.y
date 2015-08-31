@@ -96,6 +96,8 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_RETURN   "return"
 %token TOK_IF       "if"
 %token TOK_ELSE     "else"
+%token TOK_EQ       "=="
+%token TOK_NE       "!="
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -105,7 +107,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 
     /* Result types of each rule */
 %type <literal> literal
-%type <expr> simple_expr postfix_expr prefix_expr expr
+%type <expr> simple_expr postfix_expr prefix_expr add_expr equality_expr expr
 %type <statement> statement
 %type <if_list> else_if_parts
 %type <statement_list> else_part
@@ -214,8 +216,44 @@ prefix_expr:
         *$$.data.dereference = $2; }
     ;
 
-expr:
+add_expr:
       prefix_expr
+    | add_expr '+' prefix_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_ADD;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    | add_expr '-' prefix_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_SUB;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    ;
+
+equality_expr:
+      add_expr
+    | add_expr "==" add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_EQ;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    | add_expr "!=" add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_NE;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    ;
+
+expr:
+      equality_expr
     ;
 
 statement:
@@ -536,6 +574,25 @@ start_of_function:;
 
         lval->integral = integral;
         return TOK_INTEGRAL;
+    } else if (c == '=') {
+        c = token_stream_pop_char(stream);
+        if (c == '=') {
+            return TOK_EQ;
+        } else {
+            token_stream_push_char(stream, c);
+            return '=';
+        }
+    } else if (c == '!') {
+        c = token_stream_pop_char(stream);
+        if (c == '=') {
+            return TOK_NE;
+        } else {
+            token_stream_push_char(stream, c);
+            fprintf(stderr, "Lexer encountered unexpected character '!' at "
+                "line %d, column %d. Skipping.\n",
+                lloc->first_line, lloc->first_column);
+            goto start_of_function;
+        }
     } else if (c == '(' || c == ')'
             || c == '[' || c == ']'
             || c == '{' || c == '}'
@@ -544,7 +601,8 @@ start_of_function:;
             || c == ','
             || c == '*'
             || c == '&'
-            || c == '=') {
+            || c == '+'
+            || c == '-') {
         return c;
     } else if (c == EOF) {
         return 0;

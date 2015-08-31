@@ -210,6 +210,80 @@ static bool type_infer_literal(Context *context, Literal literal,
     }
 }
 
+static bool type_infer_bin_op(Context *context, Expr expr, Expr *result) {
+    assert(expr.tag == EXPR_BIN_OP);
+    Expr op_type;
+
+    if (!type_infer(context, *expr.data.bin_op.expr1, &op_type)) {
+        return false;
+    }
+
+    if (!type_check(context, *expr.data.bin_op.expr2, op_type)) {
+        fprintf(stderr, "Binary operator expressions must have the same "
+            "type.\n");
+        expr_free(&op_type);
+        return false;
+    }
+
+    if (!op_type.tag == EXPR_LITERAL) {
+        fprintf(stderr, "Binary operator expressions only operate on "
+            "integral and boolean types.\n");
+        expr_free(&op_type);
+        return false;
+    }
+
+    bool is_integral = false, is_boolean = false;
+    switch (op_type.data.literal.tag) {
+      case LIT_U8:
+      case LIT_S8:
+      case LIT_U16:
+      case LIT_S16:
+      case LIT_U32:
+      case LIT_S32:
+      case LIT_U64:
+      case LIT_S64:
+        is_integral = true;
+        break;
+
+      case LIT_BOOL:
+        is_boolean = true;
+        break;
+
+      case LIT_TYPE:
+      case LIT_VOID:
+      case LIT_INTEGRAL:
+      case LIT_BOOLEAN:
+        break;
+    }
+
+    switch (expr.data.bin_op.op) {
+      case BIN_OP_EQ:
+      case BIN_OP_NE:
+        if (is_integral || is_boolean) {
+            *result = literal_expr_bool;
+            expr_free(&op_type);
+            return true;
+        } else {
+            fprintf(stderr, "Equality expressions only operate on integral "
+                "and boolean types.\n");
+            expr_free(&op_type);
+            return false;
+        }
+
+      case BIN_OP_ADD:
+      case BIN_OP_SUB:
+        if (is_integral) {
+            *result = op_type;
+            return true;
+        } else {
+            fprintf(stderr, "Additive expressions only operate on integral "
+                "types.\n");
+            expr_free(&op_type);
+            return false;
+        }
+    }
+}
+
 static bool type_infer_func_type(Context *context, Expr expr, Expr *result) {
     assert(expr.tag == EXPR_FUNC_TYPE);
     bool ret_val = true;
@@ -564,6 +638,9 @@ bool type_infer(Context *context, Expr expr, Expr *result) {
         }
         *result = expr_copy(temp);
         return true;
+
+      case EXPR_BIN_OP:
+        return type_infer_bin_op(context, expr, result);
 
       case EXPR_FUNC_TYPE:
         return type_infer_func_type(context, expr, result);
