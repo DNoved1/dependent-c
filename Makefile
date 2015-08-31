@@ -4,7 +4,7 @@ OBJECTS = $(addprefix bin/, \
 	lex.o grammar/dependent-c.y.o \
 	ast.o symbol_table.o type.o )
 
-CFLAGS = -g -O0 -std=c99 -pedantic -Wall -Werror -Iinclude
+CFLAGS = -g -O0 -std=c11 -pedantic -Wall -Werror -Iinclude
 BISONFLAGS = -Wall -Werror
 
 #=== Building the Compiler ====================================================

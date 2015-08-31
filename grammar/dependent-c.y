@@ -148,9 +148,9 @@ literal:
     | "u64"         { $$.tag = LIT_U64;                                       }
     | "s64"         { $$.tag = LIT_S64;                                       }
     | "bool"        { $$.tag = LIT_BOOL;                                      }
-    | "true"        { $$.tag = LIT_BOOLEAN; $$.data.boolean = true;           }
-    | "false"       { $$.tag = LIT_BOOLEAN; $$.data.boolean = false;          }
-    | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.data.integral = $1;           }
+    | "true"        { $$.tag = LIT_BOOLEAN; $$.boolean = true;                }
+    | "false"       { $$.tag = LIT_BOOLEAN; $$.boolean = false;               }
+    | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.integral = $1;                }
     ;
 
 simple_expr:
@@ -158,133 +158,133 @@ simple_expr:
         $$ = $2; }
     | literal {
         $$.tag = EXPR_LITERAL;
-        $$.data.literal = $1; }
+        $$.literal = $1; }
     | TOK_IDENT {
         $$.tag = EXPR_IDENT;
-        $$.data.ident = $1; }
+        $$.ident = $1; }
     | "struct" '{' type_ident_list '}' {
         $$.tag = EXPR_STRUCT;
-        $$.data.struct_.num_fields = $3.len;
-        $$.data.struct_.field_types = $3.types;
-        $$.data.struct_.field_names = $3.idents; }
+        $$.struct_.num_fields = $3.len;
+        $$.struct_.field_types = $3.types;
+        $$.struct_.field_names = $3.idents; }
     | "union" '{' type_ident_list '}' {
         $$.tag = EXPR_UNION;
-        $$.data.union_.num_fields = $3.len;
-        $$.data.union_.field_types = $3.types;
-        $$.data.union_.field_names = $3.idents; }
+        $$.union_.num_fields = $3.len;
+        $$.union_.field_types = $3.types;
+        $$.union_.field_names = $3.idents; }
     ;
 
 postfix_expr:
       simple_expr
     | postfix_expr '*' {
         $$.tag = EXPR_POINTER;
-        $$.data.pointer = malloc(sizeof $1);
-        *$$.data.pointer = $1; }
+        $$.pointer = malloc(sizeof $1);
+        *$$.pointer = $1; }
     | postfix_expr '.' TOK_IDENT {
         $$.tag = EXPR_MEMBER;
-        $$.data.member.record = malloc(sizeof $1);
-        *$$.data.member.record = $1;
-        $$.data.member.field = $3; }
+        $$.member.record = malloc(sizeof $1);
+        *$$.member.record = $1;
+        $$.member.field = $3; }
     | postfix_expr '(' arg_list ')' {
         $$.tag = EXPR_CALL;
-        $$.data.call.func = malloc(sizeof $1);
-        *$$.data.call.func = $1;
-        $$.data.call.num_args = $3.len;
-        $$.data.call.args = $3.args; }
+        $$.call.func = malloc(sizeof $1);
+        *$$.call.func = $1;
+        $$.call.num_args = $3.len;
+        $$.call.args = $3.args; }
     | postfix_expr '[' param_list ']' {
         $$.tag = EXPR_FUNC_TYPE;
-        $$.data.func_type.ret_type = malloc(sizeof $1);
-        *$$.data.func_type.ret_type = $1;
-        $$.data.func_type.num_params = $3.len;
-        $$.data.func_type.param_types = $3.types;
-        $$.data.func_type.param_names = $3.names; }
+        $$.func_type.ret_type = malloc(sizeof $1);
+        *$$.func_type.ret_type = $1;
+        $$.func_type.num_params = $3.len;
+        $$.func_type.param_types = $3.types;
+        $$.func_type.param_names = $3.names; }
     | '(' expr ')' '{' pack_init_list '}' {
         $$.tag = EXPR_PACK;
-        $$.data.pack.type = malloc(sizeof $2);
-        *$$.data.pack.type = $2;
-        $$.data.pack.num_assigns = $5.len;
-        $$.data.pack.field_names = $5.field_names;
-        $$.data.pack.assigns = $5.assigns; }
+        $$.pack.type = malloc(sizeof $2);
+        *$$.pack.type = $2;
+        $$.pack.num_assigns = $5.len;
+        $$.pack.field_names = $5.field_names;
+        $$.pack.assigns = $5.assigns; }
     ;
 
 prefix_expr:
       postfix_expr
     | '&' prefix_expr {
         $$.tag = EXPR_REFERENCE;
-        $$.data.reference = malloc(sizeof $2);
-        *$$.data.reference = $2; }
+        $$.reference = malloc(sizeof $2);
+        *$$.reference = $2; }
     | '*' prefix_expr {
         $$.tag = EXPR_DEREFERENCE;
-        $$.data.dereference = malloc(sizeof $2);
-        *$$.data.dereference = $2; }
+        $$.dereference = malloc(sizeof $2);
+        *$$.dereference = $2; }
     ;
 
 add_expr:
       prefix_expr
     | add_expr '+' prefix_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_ADD;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_ADD;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     | add_expr '-' prefix_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_SUB;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_SUB;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     ;
 
 relational_expr:
       add_expr
     | relational_expr '<' add_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_LT;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_LT;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     | relational_expr "<=" add_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_LTE;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_LTE;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     | relational_expr '>' add_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_GT;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_GT;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     | relational_expr ">=" add_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_GTE;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_GTE;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     ;
 
 equality_expr:
       relational_expr
     | equality_expr "==" relational_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_EQ;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_EQ;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     | equality_expr "!=" relational_expr {
         $$.tag = EXPR_BIN_OP;
-        $$.data.bin_op.op = BIN_OP_NE;
-        $$.data.bin_op.expr1 = malloc(sizeof $1);
-        *$$.data.bin_op.expr1 = $1;
-        $$.data.bin_op.expr2 = malloc(sizeof $3);
-        *$$.data.bin_op.expr2 = $3; }
+        $$.bin_op.op = BIN_OP_NE;
+        $$.bin_op.expr1 = malloc(sizeof $1);
+        *$$.bin_op.expr1 = $1;
+        $$.bin_op.expr2 = malloc(sizeof $3);
+        *$$.bin_op.expr2 = $3; }
     ;
 
 expr:
@@ -296,39 +296,39 @@ statement:
         $$.tag = STATEMENT_EMPTY; }
     | expr ';' {
         $$.tag = STATEMENT_EXPR;
-        $$.data.expr = $1; }
+        $$.expr = $1; }
     | "return" expr ';' {
         $$.tag = STATEMENT_RETURN;
-        $$.data.expr = $2; }
+        $$.expr = $2; }
     | block {
         $$.tag = STATEMENT_BLOCK;
-        $$.data.block.num_statements = $1.len;
-        $$.data.block.statements = $1.statements; }
+        $$.block.num_statements = $1.len;
+        $$.block.statements = $1.statements; }
     | expr TOK_IDENT ';' {
         $$.tag = STATEMENT_DECL;
-        $$.data.decl.type = $1;
-        $$.data.decl.name = $2;
-        $$.data.decl.is_initialized = false; }
+        $$.decl.type = $1;
+        $$.decl.name = $2;
+        $$.decl.is_initialized = false; }
     | expr TOK_IDENT '=' expr ';' {
         $$.tag = STATEMENT_DECL;
-        $$.data.decl.type = $1;
-        $$.data.decl.name = $2;
-        $$.data.decl.is_initialized = true;
-        $$.data.decl.initial_value = $4; }
+        $$.decl.type = $1;
+        $$.decl.name = $2;
+        $$.decl.is_initialized = true;
+        $$.decl.initial_value = $4; }
     | "if" '(' expr ')' block else_if_parts else_part {
         $$.tag = STATEMENT_IFTHENELSE;
-        $$.data.ifthenelse.ifs = realloc($6.ifs,
-            ($6.len + 1) * sizeof *$$.data.ifthenelse.ifs);
-        memmove(&$$.data.ifthenelse.ifs[1], &$$.data.ifthenelse.ifs[0],
-            $6.len * sizeof *$$.data.ifthenelse.ifs);
-        $$.data.ifthenelse.ifs[0] = $3;
-        $$.data.ifthenelse.thens = realloc($6.thens,
-            ($6.len + 1) * sizeof *$$.data.ifthenelse.thens);
-        $$.data.ifthenelse.thens[0].num_statements = $5.len;
-        $$.data.ifthenelse.thens[0].statements = $5.statements;
-        $$.data.ifthenelse.else_.num_statements = $7.len;
-        $$.data.ifthenelse.else_.statements = $7.statements;
-        $$.data.ifthenelse.num_ifs = $6.len + 1; }
+        $$.ifthenelse.ifs = realloc($6.ifs,
+            ($6.len + 1) * sizeof *$$.ifthenelse.ifs);
+        memmove(&$$.ifthenelse.ifs[1], &$$.ifthenelse.ifs[0],
+            $6.len * sizeof *$$.ifthenelse.ifs);
+        $$.ifthenelse.ifs[0] = $3;
+        $$.ifthenelse.thens = realloc($6.thens,
+            ($6.len + 1) * sizeof *$$.ifthenelse.thens);
+        $$.ifthenelse.thens[0].num_statements = $5.len;
+        $$.ifthenelse.thens[0].statements = $5.statements;
+        $$.ifthenelse.else_.num_statements = $7.len;
+        $$.ifthenelse.else_.statements = $7.statements;
+        $$.ifthenelse.num_ifs = $6.len + 1; }
     ;
 
 else_if_parts:
@@ -359,13 +359,13 @@ top_level:
              want here. */
       expr TOK_IDENT '(' param_list ')' block {
         $$.tag = TOP_LEVEL_FUNC;
-        $$.data.func.ret_type = $1;
+        $$.func.ret_type = $1;
         $$.name = $2;
-        $$.data.func.num_params = $4.len;
-        $$.data.func.param_types = $4.types;
-        $$.data.func.param_names = $4.names;
-        $$.data.func.num_statements = $6.len;
-        $$.data.func.statements = $6.statements; }
+        $$.func.num_params = $4.len;
+        $$.func.param_types = $4.types;
+        $$.func.param_names = $4.names;
+        $$.func.num_statements = $6.len;
+        $$.func.statements = $6.statements; }
     ;
 
 translation_unit:

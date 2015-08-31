@@ -28,32 +28,32 @@ static void statement_free_vars(Statement statement,
 
       case STATEMENT_EXPR:
       case STATEMENT_RETURN:
-        expr_free_vars(statement.data.expr, num_free, free);
+        expr_free_vars(statement.expr, num_free, free);
         break;
 
       case STATEMENT_BLOCK:
-        block_free_vars(statement.data.block.num_statements,
-            statement.data.block.statements, num_free, free);
+        block_free_vars(statement.block.num_statements,
+            statement.block.statements, num_free, free);
         break;
 
       case STATEMENT_DECL:
-        expr_free_vars(statement.data.decl.type, num_free, free);
-        if (statement.data.decl.is_initialized) {
-            expr_free_vars(statement.data.decl.initial_value,
+        expr_free_vars(statement.decl.type, num_free, free);
+        if (statement.decl.is_initialized) {
+            expr_free_vars(statement.decl.initial_value,
                 num_free_temp, free_temp);
             symbol_set_union(num_free, free, num_free_temp, free_temp);
         }
         break;
 
       case STATEMENT_IFTHENELSE:
-        block_free_vars(statement.data.ifthenelse.else_.num_statements,
-            statement.data.ifthenelse.else_.statements, num_free, free);
-        for (size_t i = 0; i < statement.data.ifthenelse.num_ifs; i++) {
-            expr_free_vars(statement.data.ifthenelse.ifs[i],
+        block_free_vars(statement.ifthenelse.else_.num_statements,
+            statement.ifthenelse.else_.statements, num_free, free);
+        for (size_t i = 0; i < statement.ifthenelse.num_ifs; i++) {
+            expr_free_vars(statement.ifthenelse.ifs[i],
                 num_free_temp, free_temp);
             symbol_set_union(num_free, free, num_free_temp, free_temp);
-            block_free_vars(statement.data.ifthenelse.thens[i].num_statements,
-                statement.data.ifthenelse.thens[i].statements, num_free, free);
+            block_free_vars(statement.ifthenelse.thens[i].num_statements,
+                statement.ifthenelse.thens[i].statements, num_free, free);
             symbol_set_union(num_free, free, num_free_temp, free_temp);
         }
         break;
@@ -72,7 +72,7 @@ static void block_free_vars(size_t len, Statement block[len],
 
         switch (statement.tag) {
           case STATEMENT_DECL:
-            symbol_set_delete(num_free, free, statement.data.decl.name);
+            symbol_set_delete(num_free, free, statement.decl.name);
             break;
 
           case STATEMENT_EMPTY:
@@ -97,14 +97,14 @@ static void top_level_free_vars(TopLevel top_level,
       case TOP_LEVEL_FUNC:;
         Expr func_type = (Expr){
               .tag = EXPR_FUNC_TYPE
-            , .data.func_type.ret_type = &top_level.data.func.ret_type
-            , .data.func_type.num_params = top_level.data.func.num_params
-            , .data.func_type.param_types = top_level.data.func.param_types
-            , .data.func_type.param_names = top_level.data.func.param_names
+            , .func_type.ret_type = &top_level.func.ret_type
+            , .func_type.num_params = top_level.func.num_params
+            , .func_type.param_types = top_level.func.param_types
+            , .func_type.param_names = top_level.func.param_names
         };
         expr_free_vars(func_type, num_free, free);
-        block_free_vars(top_level.data.func.num_statements,
-            top_level.data.func.statements, num_free_temp, free_temp);
+        block_free_vars(top_level.func.num_statements,
+            top_level.func.statements, num_free_temp, free_temp);
         symbol_set_union(num_free, free, num_free_temp, free_temp);
         break;
     }
@@ -200,7 +200,7 @@ static bool type_infer_literal(Context *context, Literal literal,
       case LIT_INTEGRAL:
         *result = (Expr){
               .tag = EXPR_LITERAL
-            , .data.literal = (Literal){.tag = LIT_U64}
+            , .literal = (Literal){.tag = LIT_U64}
         };
         return true;
 
@@ -214,11 +214,11 @@ static bool type_infer_bin_op(Context *context, Expr expr, Expr *result) {
     assert(expr.tag == EXPR_BIN_OP);
     Expr op_type;
 
-    if (!type_infer(context, *expr.data.bin_op.expr1, &op_type)) {
+    if (!type_infer(context, *expr.bin_op.expr1, &op_type)) {
         return false;
     }
 
-    if (!type_check(context, *expr.data.bin_op.expr2, op_type)) {
+    if (!type_check(context, *expr.bin_op.expr2, op_type)) {
         fprintf(stderr, "Binary operator expressions must have the same "
             "type.\n");
         expr_free(&op_type);
@@ -233,7 +233,7 @@ static bool type_infer_bin_op(Context *context, Expr expr, Expr *result) {
     }
 
     bool is_integral = false, is_boolean = false;
-    switch (op_type.data.literal.tag) {
+    switch (op_type.literal.tag) {
       case LIT_U8:
       case LIT_S8:
       case LIT_U16:
@@ -256,7 +256,7 @@ static bool type_infer_bin_op(Context *context, Expr expr, Expr *result) {
         break;
     }
 
-    switch (expr.data.bin_op.op) {
+    switch (expr.bin_op.op) {
       case BIN_OP_EQ:
       case BIN_OP_NE:
         if (is_integral || is_boolean) {
@@ -305,13 +305,13 @@ static bool type_infer_func_type(Context *context, Expr expr, Expr *result) {
 
     symbol_table_enter_scope(&context->symbol_table);
 
-    for (size_t i = 0; i < expr.data.func_type.num_params; i++) {
-        if (type_check(context, expr.data.func_type.param_types[i],
+    for (size_t i = 0; i < expr.func_type.num_params; i++) {
+        if (type_check(context, expr.func_type.param_types[i],
                 literal_expr_type)) {
-            if (expr.data.func_type.param_names[i] != NULL) {
+            if (expr.func_type.param_names[i] != NULL) {
                 symbol_table_register_local(&context->symbol_table,
-                    expr.data.func_type.param_names[i],
-                    expr.data.func_type.param_types[i]);
+                    expr.func_type.param_names[i],
+                    expr.func_type.param_types[i]);
             }
         } else {
             ret_val = false;
@@ -319,7 +319,7 @@ static bool type_infer_func_type(Context *context, Expr expr, Expr *result) {
         }
     }
 
-    if (!type_check(context, *expr.data.func_type.ret_type, literal_expr_type)) {
+    if (!type_check(context, *expr.func_type.ret_type, literal_expr_type)) {
         ret_val = false;
         goto end_of_function;
     }
@@ -335,7 +335,7 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
     assert(expr.tag == EXPR_CALL);
     Expr func_type;
 
-    if (!type_infer(context, *expr.data.call.func, &func_type)) {
+    if (!type_infer(context, *expr.call.func, &func_type)) {
         return false;
     }
 
@@ -348,30 +348,30 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
         return false;
     }
 
-    if (func_type.data.func_type.num_params != expr.data.call.num_args) {
+    if (func_type.func_type.num_params != expr.call.num_args) {
         fprintf(stderr, "Calling function which expects %zu parameters with "
-            "%zu arguments.\n", func_type.data.func_type.num_params,
-            expr.data.call.num_args);
+            "%zu arguments.\n", func_type.func_type.num_params,
+            expr.call.num_args);
 
         expr_free(&func_type);
         return false;
     }
 
-    for (size_t i = 0; i < func_type.data.func_type.num_params; i++) {
-        Expr arg = expr.data.call.args[i];
-        const char *param_name = func_type.data.func_type.param_names[i];
+    for (size_t i = 0; i < func_type.func_type.num_params; i++) {
+        Expr arg = expr.call.args[i];
+        const char *param_name = func_type.func_type.param_names[i];
 
-        if (type_check(context, arg, func_type.data.func_type.param_types[i])) {
-            for (size_t j = i + 1; j < func_type.data.func_type.num_params; j++) {
+        if (type_check(context, arg, func_type.func_type.param_types[i])) {
+            for (size_t j = i + 1; j < func_type.func_type.num_params; j++) {
                 if (!expr_subst(context,
-                        &func_type.data.func_type.param_types[j],
+                        &func_type.func_type.param_types[j],
                         param_name, arg)) {
                     expr_free(&func_type);
                     return false;
                 }
             }
 
-            if (!expr_subst(context, func_type.data.func_type.ret_type,
+            if (!expr_subst(context, func_type.func_type.ret_type,
                     param_name, arg)) {
                 expr_free(&func_type);
                 return false;
@@ -382,7 +382,7 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
         }
     }
 
-    *result = expr_copy(*func_type.data.func_type.ret_type);
+    *result = expr_copy(*func_type.func_type.ret_type);
     expr_free(&func_type);
     return true;
 }
@@ -392,12 +392,11 @@ static bool type_infer_struct(Context *context, Expr expr, Expr *result) {
     bool ret_val = true;
 
     // Check that there are no duplicated field names
-    for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
-        for (size_t j = i + 1; j < expr.data.struct_.num_fields; j++) {
-            if (expr.data.struct_.field_names[i]
-                    == expr.data.struct_.field_names[j]) {
+    for (size_t i = 0; i < expr.struct_.num_fields; i++) {
+        for (size_t j = i + 1; j < expr.struct_.num_fields; j++) {
+            if (expr.struct_.field_names[i] == expr.struct_.field_names[j]) {
                 fprintf(stderr, "Structure declares field \"%s\" multiple "
-                    "times.\n", expr.data.struct_.field_names[i]);
+                    "times.\n", expr.struct_.field_names[i]);
                 return false;
             }
         }
@@ -405,12 +404,12 @@ static bool type_infer_struct(Context *context, Expr expr, Expr *result) {
 
     symbol_table_enter_scope(&context->symbol_table);
 
-    for (size_t i = 0; i < expr.data.struct_.num_fields; i++) {
-        if (type_check(context, expr.data.struct_.field_types[i],
+    for (size_t i = 0; i < expr.struct_.num_fields; i++) {
+        if (type_check(context, expr.struct_.field_types[i],
                 literal_expr_type)) {
             symbol_table_register_local(&context->symbol_table,
-                expr.data.struct_.field_names[i],
-                expr.data.struct_.field_types[i]);
+                expr.struct_.field_names[i],
+                expr.struct_.field_types[i]);
         } else {
             ret_val = false;
             goto end_of_function;
@@ -427,47 +426,46 @@ end_of_function:
 static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
     assert(expr.tag == EXPR_PACK);
 
-    if (expr.data.pack.type->tag == EXPR_STRUCT) {
+    if (expr.pack.type->tag == EXPR_STRUCT) {
         // Check that there are no duplicated assignments
-        for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
-            for (size_t j = i + 1; j < expr.data.pack.num_assigns; j++) {
-                if (expr.data.pack.field_names[i]
-                        == expr.data.pack.field_names[j]) {
+        for (size_t i = 0; i < expr.pack.num_assigns; i++) {
+            for (size_t j = i + 1; j < expr.pack.num_assigns; j++) {
+                if (expr.pack.field_names[i] == expr.pack.field_names[j]) {
                     fprintf(stderr, "Assigning to field \"%s\" twice in packed "
-                        "expression.\n", expr.data.pack.field_names[i]);
+                        "expression.\n", expr.pack.field_names[i]);
                     return false;
                 }
             }
         }
 
-        Expr struct_type = expr_copy(*expr.data.pack.type);
+        Expr struct_type = expr_copy(*expr.pack.type);
 
         // Determine which fields are depended upon
-        bool field_depended_upon[struct_type.data.struct_.num_fields];
-        for (size_t i = 0; i < struct_type.data.struct_.num_fields; i++) {
+        bool field_depended_upon[struct_type.struct_.num_fields];
+        for (size_t i = 0; i < struct_type.struct_.num_fields; i++) {
             size_t num_free[1];
             const char **free_vars[1];
-            expr_free_vars(struct_type.data.struct_.field_types[i],
+            expr_free_vars(struct_type.struct_.field_types[i],
                 num_free, free_vars);
 
             field_depended_upon[i] = 0;
             for (size_t j = 0; j < i; j++) {
                 if (symbol_set_contains(num_free, free_vars,
-                        struct_type.data.struct_.field_names[j])) {
+                        struct_type.struct_.field_names[j])) {
                     field_depended_upon[j] = true;
                 }
             }
         }
 
         // Ensure that depended upon fields are assigned
-        size_t depended_upon_assign_num[struct_type.data.struct_.num_fields];
-        for (size_t i = 0; i < struct_type.data.struct_.num_fields; i++) {
+        size_t depended_upon_assign_num[struct_type.struct_.num_fields];
+        for (size_t i = 0; i < struct_type.struct_.num_fields; i++) {
             if (field_depended_upon[i]) {
                 bool field_assigned = false;
 
-                for (size_t j = 0; j < expr.data.pack.num_assigns; j++) {
-                    if (struct_type.data.struct_.field_names[i]
-                            == expr.data.pack.field_names[j]) {
+                for (size_t j = 0; j < expr.pack.num_assigns; j++) {
+                    if (struct_type.struct_.field_names[i]
+                            == expr.pack.field_names[j]) {
                         field_assigned = true;
                         depended_upon_assign_num[i] = j;
                         break;
@@ -477,7 +475,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
                 if (!field_assigned) {
                     fprintf(stderr, "Depended-upon field \"%s\" not assigned "
                         "in packed expression.\n",
-                        struct_type.data.struct_.field_names[i]);
+                        struct_type.struct_.field_names[i]);
                     expr_free(&struct_type);
                     return false;
                 }
@@ -485,14 +483,14 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
         }
 
         // Substitute dependent field types for their assigned values
-        for (size_t i = 0; i < struct_type.data.struct_.num_fields; i++) {
+        for (size_t i = 0; i < struct_type.struct_.num_fields; i++) {
             if (field_depended_upon[i]) {
-                for (size_t j = i + 1; j < struct_type.data.struct_.num_fields;
+                for (size_t j = i + 1; j < struct_type.struct_.num_fields;
                         j++) {
                     if (!expr_subst(context,
-                            &struct_type.data.struct_.field_types[j],
-                            struct_type.data.struct_.field_names[i],
-                            expr.data.pack.assigns[
+                            &struct_type.struct_.field_types[j],
+                            struct_type.struct_.field_names[i],
+                            expr.pack.assigns[
                                 depended_upon_assign_num[i]])) {
                         expr_free(&struct_type);
                         return false;
@@ -503,14 +501,14 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
 
         // Check that each assignment is of the correct type
         // (Also check that each assignment is to an existing field name)
-        for (size_t i = 0; i < expr.data.pack.num_assigns; i++) {
+        for (size_t i = 0; i < expr.pack.num_assigns; i++) {
             bool valid_field = false;
 
-            for (size_t j = 0; j < struct_type.data.struct_.num_fields; j++) {
-                if (expr.data.pack.field_names[i]
-                        == struct_type.data.struct_.field_names[j]) {
-                    if (type_check(context, expr.data.pack.assigns[i],
-                            struct_type.data.struct_.field_types[j])) {
+            for (size_t j = 0; j < struct_type.struct_.num_fields; j++) {
+                if (expr.pack.field_names[i]
+                        == struct_type.struct_.field_names[j]) {
+                    if (type_check(context, expr.pack.assigns[i],
+                            struct_type.struct_.field_types[j])) {
                         valid_field = true;
                         break;
                     } else {
@@ -522,7 +520,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
 
             if (!valid_field) {
                 fprintf(stderr, "Assigning to field \"%s\" which does not "
-                    "exist in the struct.\n", expr.data.pack.field_names[i]);
+                    "exist in the struct.\n", expr.pack.field_names[i]);
                 expr_free(&struct_type);
                 return false;
             }
@@ -531,9 +529,9 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
         *result = struct_type;
         return true;
 
-    } else if (expr.data.pack.type->tag == EXPR_UNION) {
+    } else if (expr.pack.type->tag == EXPR_UNION) {
         // Check that there is exactly one assignment
-        if (expr.data.pack.num_assigns != 1) {
+        if (expr.pack.num_assigns != 1) {
             fprintf(stderr, "Must assign exactly one field in a union.\n");
             return false;
         }
@@ -541,9 +539,9 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
         // Check that that one assignment is to an existing field in the type
         size_t union_field_chosen;
         bool valid_field_chosen = false;
-        for (size_t i = 0; i < expr.data.pack.type->data.union_.num_fields; i++) {
-            if (expr.data.pack.type->data.union_.field_names[i]
-                    == expr.data.pack.field_names[0]) {
+        for (size_t i = 0; i < expr.pack.type->union_.num_fields; i++) {
+            if (expr.pack.type->union_.field_names[i]
+                    == expr.pack.field_names[0]) {
                 union_field_chosen = i;
                 valid_field_chosen = true;
                 break;
@@ -551,15 +549,14 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
         }
         if (!valid_field_chosen) {
             fprintf(stderr, "Assigning to field \"%s\" which does not exist "
-                "in the union.\n", expr.data.pack.field_names[0]);
+                "in the union.\n", expr.pack.field_names[0]);
             return false;
         }
 
         // Check that assignment is of correct type
-        if (type_check(context, expr.data.pack.assigns[0],
-                expr.data.pack.type->data.union_.field_types[
-                    union_field_chosen])) {
-            *result = expr_copy(*expr.data.pack.type);
+        if (type_check(context, expr.pack.assigns[0],
+                expr.pack.type->union_.field_types[union_field_chosen])) {
+            *result = expr_copy(*expr.pack.type);
             return true;
         } else {
             return false;
@@ -568,7 +565,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
     } else {
 
         fprintf(stderr, "Cannot pack into non-struct and non-union type (");
-        expr_pprint(stderr, 0, *expr.data.pack.type);
+        expr_pprint(stderr, 0, *expr.pack.type);
         fprintf(stderr, ").\n");
 
         return false;
@@ -579,7 +576,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
     assert(expr.tag == EXPR_MEMBER);
     Expr record_type;
 
-    if (!type_infer(context, *expr.data.member.record, &record_type)) {
+    if (!type_infer(context, *expr.member.record, &record_type)) {
         return false;
     }
 
@@ -596,34 +593,32 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
         // We don't have a a let expression at the moment, so this will just
         // not work for now.
 
-        for (size_t i = 0; i < record_type.data.struct_.num_fields; i++) {
-            if (record_type.data.struct_.field_names[i]
-                    == expr.data.member.field) {
-                *result = expr_copy(record_type.data.struct_.field_types[i]);
+        for (size_t i = 0; i < record_type.struct_.num_fields; i++) {
+            if (record_type.struct_.field_names[i] == expr.member.field) {
+                *result = expr_copy(record_type.struct_.field_types[i]);
                 expr_free(&record_type);
                 return true;
             }
         }
 
         fprintf(stderr, "Accessing field \"%s\" which does not exist in "
-            "struct type (", expr.data.member.field);
+            "struct type (", expr.member.field);
         expr_pprint(stderr, 0, record_type);
         fprintf(stderr, ").\n");
         expr_free(&record_type);
         return false;
 
     } else if (record_type.tag == EXPR_UNION) {
-        for (size_t i = 0; i < record_type.data.union_.num_fields; i++) {
-            if (record_type.data.union_.field_names[i]
-                    == expr.data.member.field) {
-                *result = expr_copy(record_type.data.union_.field_types[i]);
+        for (size_t i = 0; i < record_type.union_.num_fields; i++) {
+            if (record_type.union_.field_names[i] == expr.member.field) {
+                *result = expr_copy(record_type.union_.field_types[i]);
                 expr_free(&record_type);
                 return true;
             }
         }
 
         fprintf(stderr, "Accessing field \"%s\" which does not exist in "
-            "union type (", expr.data.member.field);
+            "union type (", expr.member.field);
         expr_pprint(stderr, 0, record_type);
         fprintf(stderr, ").\n");
         expr_free(&record_type);
@@ -632,8 +627,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
     } else {
         fprintf(stderr, "Non-struct and non-union type (");
         expr_pprint(stderr, 0, record_type);
-        fprintf(stderr, ") does not have field \"%s\".\n",
-            expr.data.member.field);
+        fprintf(stderr, ") does not have field \"%s\".\n", expr.member.field);
         expr_free(&record_type);
         return false;
     }
@@ -644,11 +638,11 @@ bool type_infer(Context *context, Expr expr, Expr *result) {
 
     switch (expr.tag) {
       case EXPR_LITERAL:
-        return type_infer_literal(context, expr.data.literal, result);
+        return type_infer_literal(context, expr.literal, result);
 
       case EXPR_IDENT:
         if (!symbol_table_lookup(&context->symbol_table,
-                expr.data.ident, &temp)) {
+                expr.ident, &temp)) {
             return false;
         }
         *result = expr_copy(temp);
@@ -667,18 +661,18 @@ bool type_infer(Context *context, Expr expr, Expr *result) {
         return type_infer_struct(context, expr, result);
 
       case EXPR_UNION:
-        for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
-            for (size_t j = i + 1; j < expr.data.union_.num_fields; j++) {
-                if (expr.data.union_.field_names[i]
-                        == expr.data.union_.field_names[j]) {
+        for (size_t i = 0; i < expr.union_.num_fields; i++) {
+            for (size_t j = i + 1; j < expr.union_.num_fields; j++) {
+                if (expr.union_.field_names[i]
+                        == expr.union_.field_names[j]) {
                     fprintf(stderr, "Union declares field \"%s\" multiple "
-                        "times.\n", expr.data.union_.field_names[i]);
+                        "times.\n", expr.union_.field_names[i]);
                     return false;
                 }
             }
         }
-        for (size_t i = 0; i < expr.data.union_.num_fields; i++) {
-            if (!type_check(context, expr.data.union_.field_types[i],
+        for (size_t i = 0; i < expr.union_.num_fields; i++) {
+            if (!type_check(context, expr.union_.field_types[i],
                     literal_expr_type)) {
                 return false;
             }
@@ -693,29 +687,29 @@ bool type_infer(Context *context, Expr expr, Expr *result) {
         return type_infer_member(context, expr, result);
 
       case EXPR_POINTER:
-        if (!type_check(context, *expr.data.pointer, literal_expr_type)) {
+        if (!type_check(context, *expr.pointer, literal_expr_type)) {
             return false;
         }
         *result = literal_expr_type;
         return true;
 
       case EXPR_REFERENCE:
-        if (!type_infer(context, *expr.data.reference, &temp)) {
+        if (!type_infer(context, *expr.reference, &temp)) {
             return false;
         }
         result->tag = EXPR_POINTER;
-        result->data.pointer = malloc(sizeof temp);
-        *result->data.pointer = temp;
+        result->pointer = malloc(sizeof temp);
+        *result->pointer = temp;
         return true;
 
       case EXPR_DEREFERENCE:
-        if (!type_infer(context, *expr.data.dereference, &temp)) {
+        if (!type_infer(context, *expr.dereference, &temp)) {
             return false;
         }
         if (temp.tag != EXPR_POINTER) {
             return false;
         }
-        *result = expr_copy(*temp.data.pointer);
+        *result = expr_copy(*temp.pointer);
         expr_free(&temp);
         return true;
     }
@@ -771,7 +765,7 @@ static bool type_check_statement(Context *context, Statement statement,
         return true;
 
       case STATEMENT_EXPR:
-        if (!type_infer(context, statement.data.expr, &temp)) {
+        if (!type_infer(context, statement.expr, &temp)) {
             return false;
         }
         expr_free(&temp);
@@ -779,12 +773,11 @@ static bool type_check_statement(Context *context, Statement statement,
 
       case STATEMENT_RETURN:
         *returns = true;
-        return type_check(context, statement.data.expr, ret_type);
+        return type_check(context, statement.expr, ret_type);
 
       case STATEMENT_BLOCK:
         symbol_table_enter_scope(&context->symbol_table);
-        if (!type_check_block(context, statement.data.block,
-                ret_type, returns)) {
+        if (!type_check_block(context, statement.block, ret_type, returns)) {
             symbol_table_leave_scope(&context->symbol_table);
             return false;
         }
@@ -792,28 +785,28 @@ static bool type_check_statement(Context *context, Statement statement,
         return true;
 
       case STATEMENT_DECL:
-        if (!type_check(context, statement.data.decl.type, literal_expr_type)) {
+        if (!type_check(context, statement.decl.type, literal_expr_type)) {
             return false;
         }
-        if (statement.data.decl.is_initialized) {
-            if (!type_check(context, statement.data.decl.initial_value,
-                    statement.data.decl.type)) {
+        if (statement.decl.is_initialized) {
+            if (!type_check(context, statement.decl.initial_value,
+                    statement.decl.type)) {
                 return false;
             }
         }
         symbol_table_register_local(&context->symbol_table,
-            statement.data.decl.name, statement.data.decl.type);
+            statement.decl.name, statement.decl.type);
         return true;
 
       case STATEMENT_IFTHENELSE:
         *returns = true;
-        for (size_t i = 0; i < statement.data.ifthenelse.num_ifs; i++) {
-            if (!type_check(context, statement.data.ifthenelse.ifs[i],
+        for (size_t i = 0; i < statement.ifthenelse.num_ifs; i++) {
+            if (!type_check(context, statement.ifthenelse.ifs[i],
                     literal_expr_bool)) {
                 return false;
             }
             symbol_table_enter_scope(&context->symbol_table);
-            if (!type_check_block(context, statement.data.ifthenelse.thens[i],
+            if (!type_check_block(context, statement.ifthenelse.thens[i],
                     ret_type, &returns_temp)) {
                 symbol_table_leave_scope(&context->symbol_table);
                 return false;
@@ -822,7 +815,7 @@ static bool type_check_statement(Context *context, Statement statement,
             *returns &= returns_temp;
         }
         symbol_table_enter_scope(&context->symbol_table);
-        if (!type_check_block(context, statement.data.ifthenelse.else_,
+        if (!type_check_block(context, statement.ifthenelse.else_,
                 ret_type, &returns_temp)) {
             symbol_table_leave_scope(&context->symbol_table);
             return false;
@@ -838,10 +831,10 @@ bool type_check_top_level(Context *context, TopLevel top_level) {
       case TOP_LEVEL_FUNC:;
         Expr func_type = (Expr) {
               .tag = EXPR_FUNC_TYPE
-            , .data.func_type.ret_type = &top_level.data.func.ret_type
-            , .data.func_type.num_params = top_level.data.func.num_params
-            , .data.func_type.param_types = top_level.data.func.param_types
-            , .data.func_type.param_names = top_level.data.func.param_names
+            , .func_type.ret_type = &top_level.func.ret_type
+            , .func_type.num_params = top_level.func.num_params
+            , .func_type.param_types = top_level.func.param_types
+            , .func_type.param_names = top_level.func.param_names
         };
         if (!type_check(context, func_type, literal_expr_type)) {
             return false;
@@ -849,22 +842,22 @@ bool type_check_top_level(Context *context, TopLevel top_level) {
         symbol_table_register_global(&context->symbol_table,
             top_level.name, func_type);
         symbol_table_enter_scope(&context->symbol_table);
-        for (size_t i = 0; i < top_level.data.func.num_params; i++) {
+        for (size_t i = 0; i < top_level.func.num_params; i++) {
             symbol_table_register_local(&context->symbol_table,
-                top_level.data.func.param_names[i],
-                top_level.data.func.param_types[i]);
+                top_level.func.param_names[i],
+                top_level.func.param_types[i]);
         }
         bool returns = false, returns_temp;
-        for (size_t i = 0; i < top_level.data.func.num_statements; i++) {
+        for (size_t i = 0; i < top_level.func.num_statements; i++) {
             if (!type_check_statement(context,
-                    top_level.data.func.statements[i],
-                    top_level.data.func.ret_type,
+                    top_level.func.statements[i],
+                    top_level.func.ret_type,
                     &returns_temp)) {
                 symbol_table_leave_scope(&context->symbol_table);
                 return false;
             }
             returns |= returns_temp;
-            if (returns_temp && i != top_level.data.func.num_statements - 1) {
+            if (returns_temp && i != top_level.func.num_statements - 1) {
                 fprintf(stderr, "Warning: Dead code.\n");
             }
         }

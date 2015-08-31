@@ -28,7 +28,7 @@ typedef struct {
     union {
         uint64_t integral;
         bool boolean;
-    } data;
+    };
 } Literal;
 
 /***** Expressions ***********************************************************/
@@ -114,20 +114,20 @@ struct Expr {
         Expr *pointer;
         Expr *reference;
         Expr *dereference;
-    } data;
+    };
 };
 
 /* Since this will be used fairly often we'll just go ahead and define it here.*/
 #define literal_expr_type \
     ((Expr){ \
           .tag = EXPR_LITERAL \
-        , .data.literal = (Literal){.tag = LIT_TYPE} \
+        , .literal = (Literal){.tag = LIT_TYPE} \
     })
 
 #define literal_expr_bool \
     ((Expr){ \
           .tag = EXPR_LITERAL \
-        , .data.literal = (Literal){.tag = LIT_BOOL} \
+        , .literal = (Literal){.tag = LIT_BOOL} \
     })
 
 /***** Statements ************************************************************/
@@ -167,7 +167,7 @@ struct Statement {
             Block *thens;
             Block else_;
         } ifthenelse;
-    } data;
+    };
 };
 
 /***** Top-Level Definitions *************************************************/
@@ -187,7 +187,7 @@ typedef struct {
             size_t num_statements;
             Statement *statements;
         } func;
-    } data;
+    };
 } TopLevel;
 
 typedef struct {
