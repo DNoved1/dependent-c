@@ -107,6 +107,7 @@ struct Expr {
 typedef enum {
       STATEMENT_EMPTY
     , STATEMENT_EXPR
+    , STATEMENT_RETURN
     , STATEMENT_BLOCK
     , STATEMENT_DECL
 } StatementTag;

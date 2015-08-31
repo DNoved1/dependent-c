@@ -618,6 +618,7 @@ void statement_free(Statement *statement) {
         break;
 
       case STATEMENT_EXPR:
+      case STATEMENT_RETURN:
         expr_free(&statement->data.expr);
         break;
 
@@ -800,6 +801,10 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
       case STATEMENT_EMPTY:
         fprintf(to, ";\n");
         break;
+
+      case STATEMENT_RETURN:
+        fprintf(to, "return ");
+        // Fallthrough
 
       case STATEMENT_EXPR:
         expr_pprint(to, nesting, statement.data.expr);

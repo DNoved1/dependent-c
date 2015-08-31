@@ -27,6 +27,7 @@ static void statement_free_vars(Statement statement,
         break;
 
       case STATEMENT_EXPR:
+      case STATEMENT_RETURN:
         expr_free_vars(statement.data.expr, num_free, free);
         break;
 
@@ -63,6 +64,7 @@ static void block_free_vars(size_t len, Statement block[len],
 
           case STATEMENT_EMPTY:
           case STATEMENT_EXPR:
+          case STATEMENT_RETURN:
           case STATEMENT_BLOCK:
             break;
         }
@@ -624,8 +626,11 @@ bool type_equal(Context *context, Expr type1, Expr type2) {
     }
 }
 
-static bool type_check_statement(Context *context, Statement statement) {
+static bool type_check_statement(Context *context, Statement statement,
+        Expr ret_type, bool *returns) {
     Expr temp;
+    *returns = false;
+    bool returns_temp;
 
     switch (statement.tag) {
       case STATEMENT_EMPTY:
@@ -638,13 +643,22 @@ static bool type_check_statement(Context *context, Statement statement) {
         expr_free(&temp);
         return true;
 
+      case STATEMENT_RETURN:
+        *returns = true;
+        return type_check(context, statement.data.expr, ret_type);
+
       case STATEMENT_BLOCK:
         symbol_table_enter_scope(&context->symbol_table);
         for (size_t i = 0; i < statement.data.block.num_statements; i++) {
             if (!type_check_statement(context,
-                    statement.data.block.statements[i])) {
+                    statement.data.block.statements[i],
+                    ret_type, &returns_temp)) {
                 symbol_table_leave_scope(&context->symbol_table);
                 return false;
+            }
+            *returns |= returns_temp;
+            if (returns_temp && i != statement.data.block.num_statements - 1) {
+                fprintf(stderr, "Warning: Dead code.\n");
             }
         }
         symbol_table_leave_scope(&context->symbol_table);
@@ -687,15 +701,26 @@ bool type_check_top_level(Context *context, TopLevel top_level) {
                 top_level.data.func.param_names[i],
                 top_level.data.func.param_types[i]);
         }
+        bool returns = false, returns_temp;
         for (size_t i = 0; i < top_level.data.func.num_statements; i++) {
             if (!type_check_statement(context,
-                    top_level.data.func.statements[i])) {
+                    top_level.data.func.statements[i],
+                    top_level.data.func.ret_type,
+                    &returns_temp)) {
                 symbol_table_leave_scope(&context->symbol_table);
                 return false;
             }
+            returns |= returns_temp;
+            if (returns_temp && i != top_level.data.func.num_statements - 1) {
+                fprintf(stderr, "Warning: Dead code.\n");
+            }
         }
         symbol_table_leave_scope(&context->symbol_table);
-        // TODO, need to ensure the return value matches
+        if (!returns) {
+            fprintf(stderr, "Function \"%s\" does not return.\n",
+                top_level.name);
+            return false;
+        }
         return true;
     }
 }

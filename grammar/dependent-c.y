@@ -84,6 +84,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_S64      "s64"
 %token TOK_STRUCT   "struct"
 %token TOK_UNION    "union"
+%token TOK_RETURN   "return"
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -207,6 +208,9 @@ statement:
     | expr ';' {
         $$.tag = STATEMENT_EXPR;
         $$.data.expr = $1; }
+    | "return" expr ';' {
+        $$.tag = STATEMENT_RETURN;
+        $$.data.expr = $2; }
     | block {
         $$.tag = STATEMENT_BLOCK;
         $$.data.block.num_statements = $1.len;
@@ -449,6 +453,7 @@ start_of_function:;
         check_is_reserved(s64,      TOK_S64)
         check_is_reserved(struct,   TOK_STRUCT)
         check_is_reserved(union,    TOK_UNION)
+        check_is_reserved(return,   TOK_RETURN)
         else {
             const char *interned_ident = symbol_intern(&context->interns, ident);
             lval->ident = interned_ident;
