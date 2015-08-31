@@ -35,6 +35,10 @@ typedef struct {
 typedef enum {
       BIN_OP_EQ
     , BIN_OP_NE
+    , BIN_OP_LT
+    , BIN_OP_LTE
+    , BIN_OP_GT
+    , BIN_OP_GTE
     , BIN_OP_ADD
     , BIN_OP_SUB
 } BinaryOp;

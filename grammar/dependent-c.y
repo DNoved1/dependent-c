@@ -98,6 +98,8 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_ELSE     "else"
 %token TOK_EQ       "=="
 %token TOK_NE       "!="
+%token TOK_LTE      "<="
+%token TOK_GTE      ">="
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -107,7 +109,8 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 
     /* Result types of each rule */
 %type <literal> literal
-%type <expr> simple_expr postfix_expr prefix_expr add_expr equality_expr expr
+%type <expr> simple_expr postfix_expr prefix_expr add_expr relational_expr
+%type <expr> equality_expr expr
 %type <statement> statement
 %type <if_list> else_if_parts
 %type <statement_list> else_part
@@ -234,16 +237,48 @@ add_expr:
         *$$.data.bin_op.expr2 = $3; }
     ;
 
-equality_expr:
+relational_expr:
       add_expr
-    | add_expr "==" add_expr {
+    | relational_expr '<' add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_LT;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    | relational_expr "<=" add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_LTE;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    | relational_expr '>' add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_GT;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    | relational_expr ">=" add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.data.bin_op.op = BIN_OP_GTE;
+        $$.data.bin_op.expr1 = malloc(sizeof $1);
+        *$$.data.bin_op.expr1 = $1;
+        $$.data.bin_op.expr2 = malloc(sizeof $3);
+        *$$.data.bin_op.expr2 = $3; }
+    ;
+
+equality_expr:
+      relational_expr
+    | equality_expr "==" relational_expr {
         $$.tag = EXPR_BIN_OP;
         $$.data.bin_op.op = BIN_OP_EQ;
         $$.data.bin_op.expr1 = malloc(sizeof $1);
         *$$.data.bin_op.expr1 = $1;
         $$.data.bin_op.expr2 = malloc(sizeof $3);
         *$$.data.bin_op.expr2 = $3; }
-    | add_expr "!=" add_expr {
+    | equality_expr "!=" relational_expr {
         $$.tag = EXPR_BIN_OP;
         $$.data.bin_op.op = BIN_OP_NE;
         $$.data.bin_op.expr1 = malloc(sizeof $1);
@@ -592,6 +627,22 @@ start_of_function:;
                 "line %d, column %d. Skipping.\n",
                 lloc->first_line, lloc->first_column);
             goto start_of_function;
+        }
+    } else if (c == '<') {
+        c = token_stream_pop_char(stream);
+        if (c == '=') {
+            return TOK_LTE;
+        } else {
+            token_stream_push_char(stream, c);
+            return '<';
+        }
+    } else if (c == '>') {
+        c = token_stream_pop_char(stream);
+        if (c == '=') {
+            return TOK_GTE;
+        } else {
+            token_stream_push_char(stream, c);
+            return '>';
         }
     } else if (c == '(' || c == ')'
             || c == '[' || c == ']'

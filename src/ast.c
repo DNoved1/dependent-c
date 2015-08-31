@@ -754,6 +754,10 @@ static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
     switch (bin_op) {
       tag_to_string(BIN_OP_EQ, "==")
       tag_to_string(BIN_OP_NE, "!=")
+      tag_to_string(BIN_OP_LT, "<")
+      tag_to_string(BIN_OP_LTE, "<=")
+      tag_to_string(BIN_OP_GT, ">")
+      tag_to_string(BIN_OP_GTE, ">=")
       tag_to_string(BIN_OP_ADD, "+")
       tag_to_string(BIN_OP_SUB, "-")
     }
@@ -949,7 +953,7 @@ void top_level_pprint(FILE *to, TopLevel top_level) {
         for (size_t i = 0; i < top_level.data.func.num_statements; i++) {
             statement_pprint(to, 1, top_level.data.func.statements[i]);
         }
-        putc('}', to);
+        fprintf(to, "}\n");
         break;
     }
 }

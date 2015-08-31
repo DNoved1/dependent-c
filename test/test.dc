@@ -1,0 +1,23 @@
+type Array(type T, u64 n) {
+    if (size == 0) {
+        return struct {};
+    } else {
+        return struct {T fst; Array(T, n - 1) snd; };
+    }
+}
+
+type lift_bool(bool b) {
+    if (b) {
+        return struct {};
+    } else {
+        return union {};
+    }
+}
+
+T get(type T, u64 n, u64 i, lift_bool(i < n) proof, Array(T, n) array) {
+    if (i == 0) {
+        return array.fst;
+    } else {
+        return get(T, n, i - 1, (struct{}){}, array.snd);
+    }
+}

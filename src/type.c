@@ -270,6 +270,21 @@ static bool type_infer_bin_op(Context *context, Expr expr, Expr *result) {
             return false;
         }
 
+      case BIN_OP_LT:
+      case BIN_OP_LTE:
+      case BIN_OP_GT:
+      case BIN_OP_GTE:
+        if (is_integral) {
+            *result = literal_expr_bool;
+            expr_free(&op_type);
+            return true;
+        } else {
+            fprintf(stderr, "Relational expressions only operate on integral "
+                "type.\n");
+            expr_free(&op_type);
+            return false;
+        }
+
       case BIN_OP_ADD:
       case BIN_OP_SUB:
         if (is_integral) {
