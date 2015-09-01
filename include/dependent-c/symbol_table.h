@@ -59,26 +59,26 @@ bool symbol_table_lookup(SymbolTable *symbols,
 
 /***** Symbol Sets ***********************************************************/
 
+typedef struct {
+    size_t size;
+    const char **symbols;
+} SymbolSet;
+
+SymbolSet symbol_set_empty(void);
+void symbol_set_free(SymbolSet *set);
+
 /* Remove a symbol from a symbol set if present. */
-void symbol_set_delete(size_t *set_size, const char ***set,
-    const char *delete);
+void symbol_set_delete(SymbolSet *set, const char *symbol);
 
 /* Add a symbol to a symbol set if not present. */
-void symbol_set_add(size_t *set_size, const char ***set,
-    const char *add);
+void symbol_set_add(SymbolSet *set, const char *symbol);
 
 /* Checks if a symbol is in the symbol set. */
-bool symbol_set_contains(size_t *set_size, const char ***set,
-    const char *symbol);
-
-/* Checks if the intersection of two sets is non-empty. */
-bool symbol_set_contains_any(size_t *set1_size, const char ***set1,
-    size_t *set2_size, const char ***set2);
+bool symbol_set_contains(const SymbolSet *set, const char *symbol);
 
 /* Union two sets. The result is placed into the first set and the second set
  * is freed.
  */
-void symbol_set_union(size_t *set1_size, const char ***set1,
-    size_t *set2_size, const char ***set2);
+void symbol_set_union(SymbolSet *set1, SymbolSet *set2);
 
 #endif /* DEPENDENT_C_SYMBOL_TABLE_H */

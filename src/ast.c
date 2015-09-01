@@ -267,100 +267,93 @@ Expr expr_copy(Expr x) {
     return y;
 }
 
-void expr_free_vars(Expr expr, size_t *num_free, const char ***free) {
-    size_t num_free_temp[1];
-    const char **free_temp[1];
+void expr_free_vars(Expr expr, SymbolSet *free_vars) {
+    SymbolSet free_vars_temp[1];
 
     switch (expr.tag) {
       case EXPR_LITERAL:
-        *num_free = 0;
-        *free = NULL;
+        *free_vars = symbol_set_empty();
         break;
 
       case EXPR_IDENT:
-        *num_free = 1;
-        *free = malloc(sizeof **free);
-        **free = expr.ident;
+        *free_vars = symbol_set_empty();
+        symbol_set_add(free_vars, expr.ident);
         break;
 
       case EXPR_BIN_OP:
-        expr_free_vars(*expr.bin_op.expr1, num_free, free);
-        expr_free_vars(*expr.bin_op.expr2, num_free_temp, free_temp);
-        symbol_set_union(num_free, free, num_free_temp, free_temp);
+        expr_free_vars(*expr.bin_op.expr1, free_vars);
+        expr_free_vars(*expr.bin_op.expr2, free_vars_temp);
+        symbol_set_union(free_vars, free_vars_temp);
         break;
 
       case EXPR_FUNC_TYPE:
-        expr_free_vars(*expr.func_type.ret_type, num_free, free);
+        expr_free_vars(*expr.func_type.ret_type, free_vars);
         for (size_t i = 0; i < expr.func_type.num_params; i++) {
             if (expr.func_type.param_names[i] != NULL) {
-                symbol_set_delete(num_free, free, expr.func_type.param_names[i]);
+                symbol_set_delete(free_vars, expr.func_type.param_names[i]);
             }
         }
         for (size_t i = 0; i < expr.func_type.num_params; i++) {
-            expr_free_vars(expr.func_type.param_types[i],
-                num_free_temp, free_temp);
+            expr_free_vars(expr.func_type.param_types[i], free_vars_temp);
             for (size_t j = 0; j < i; j++) {
                 if (expr.func_type.param_names[j] != NULL) {
-                    symbol_set_delete(num_free_temp, free_temp,
+                    symbol_set_delete(free_vars_temp,
                         expr.func_type.param_names[j]);
                 }
             }
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_CALL:
-        expr_free_vars(*expr.call.func, num_free, free);
+        expr_free_vars(*expr.call.func, free_vars);
         for (size_t i = 0; i < expr.call.num_args; i++) {
-            expr_free_vars(expr.call.args[i], num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            expr_free_vars(expr.call.args[i], free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_STRUCT:
-        *num_free = 0;
-        *free = NULL;
+        *free_vars = symbol_set_empty();
         for (size_t i = 0; i < expr.struct_.num_fields; i++) {
-            expr_free_vars(expr.struct_.field_types[i], num_free_temp, free_temp);
+            expr_free_vars(expr.struct_.field_types[i], free_vars_temp);
             for (size_t j = 0; j < i; j++) {
-                symbol_set_delete(num_free_temp, free_temp,
-                    expr.struct_.field_names[j]);
+                symbol_set_delete(free_vars_temp, expr.struct_.field_names[j]);
             }
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_UNION:
-        *num_free = 0;
-        *free = NULL;
+        *free_vars = symbol_set_empty();
         for (size_t i = 0; i < expr.union_.num_fields; i++) {
-            expr_free_vars(expr.union_.field_types[i], num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            expr_free_vars(expr.union_.field_types[i], free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_PACK:
-        expr_free_vars(*expr.pack.type, num_free, free);
+        expr_free_vars(*expr.pack.type, free_vars);
         for (size_t i = 0; i < expr.pack.num_assigns; i++) {
-            expr_free_vars(expr.pack.assigns[i], num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            expr_free_vars(expr.pack.assigns[i], free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_MEMBER:
-        expr_free_vars(*expr.member.record, num_free, free);
+        expr_free_vars(*expr.member.record, free_vars);
         break;
 
       case EXPR_POINTER:
-        expr_free_vars(*expr.pointer, num_free, free);
+        expr_free_vars(*expr.pointer, free_vars);
         break;
 
       case EXPR_REFERENCE:
-        expr_free_vars(*expr.reference, num_free, free);
+        expr_free_vars(*expr.reference, free_vars);
         break;
 
       case EXPR_DEREFERENCE:
-        expr_free_vars(*expr.dereference, num_free, free);
+        expr_free_vars(*expr.dereference, free_vars);
         break;
     }
 }
@@ -370,9 +363,8 @@ static bool expr_func_type_subst(Context *context, Expr *expr, const char *name,
     assert(expr->tag == EXPR_FUNC_TYPE);
     bool ret_val = false;
 
-    size_t num_free;
-    const char **free_vars;
-    expr_free_vars(replacement, &num_free, &free_vars);
+    SymbolSet free_vars;
+    expr_free_vars(replacement, &free_vars);
 
     for (size_t i = 0; i < expr->func_type.num_params; i++) {
         if (!expr_subst(context, &expr->func_type.param_types[i],
@@ -387,7 +379,7 @@ static bool expr_func_type_subst(Context *context, Expr *expr, const char *name,
                 goto end_of_function;
             }
 
-            if (symbol_set_contains(&num_free, &free_vars, old_param_name)) {
+            if (symbol_set_contains(&free_vars, old_param_name)) {
                 const char *new_param_name = symbol_gensym(&context->interns,
                     old_param_name);
                 Expr new_replacement = (Expr){
@@ -417,7 +409,7 @@ static bool expr_func_type_subst(Context *context, Expr *expr, const char *name,
     ret_val = true;
 
 end_of_function:
-    free(free_vars);
+    symbol_set_free(&free_vars);
     return ret_val;
 }
 
@@ -426,9 +418,8 @@ static bool expr_struct_subst(Context *context, Expr *expr, const char *name,
     assert(expr->tag == EXPR_STRUCT);
     bool ret_val = false;
 
-    size_t num_free;
-    const char **free_vars;
-    expr_free_vars(replacement, &num_free, &free_vars);
+    SymbolSet free_vars;
+    expr_free_vars(replacement, &free_vars);
 
     for (size_t i = 0; i < expr->struct_.num_fields; i++) {
         if (!expr_subst(context, &expr->struct_.field_types[i],
@@ -442,7 +433,7 @@ static bool expr_struct_subst(Context *context, Expr *expr, const char *name,
             goto end_of_function;
         }
 
-        if (symbol_set_contains(&num_free, &free_vars, old_field_name)) {
+        if (symbol_set_contains(&free_vars, old_field_name)) {
             goto end_of_function;
         }
     }
@@ -450,7 +441,7 @@ static bool expr_struct_subst(Context *context, Expr *expr, const char *name,
     ret_val = true;
 
 end_of_function:
-    free(free_vars);
+    symbol_set_free(&free_vars);
     return ret_val;
 }
 
@@ -470,9 +461,8 @@ static bool expr_pack_subst(Context *context, Expr *expr, const char *name,
     assert(expr->tag == EXPR_PACK);
     bool ret_val = false;
 
-    size_t num_free;
-    const char **free_vars;
-    expr_free_vars(replacement, &num_free, &free_vars);
+    SymbolSet free_vars;
+    expr_free_vars(replacement, &free_vars);
 
     for (size_t i = 0; i < expr->pack.num_assigns; i++) {
         if (!expr_subst(context, &expr->pack.assigns[i], name, replacement)) {
@@ -485,7 +475,7 @@ static bool expr_pack_subst(Context *context, Expr *expr, const char *name,
             goto end_of_function;
         }
 
-        if (symbol_set_contains(&num_free, &free_vars, old_field_name)) {
+        if (symbol_set_contains(&free_vars, old_field_name)) {
             goto end_of_function;
         }
     }
@@ -493,7 +483,7 @@ static bool expr_pack_subst(Context *context, Expr *expr, const char *name,
     ret_val = true;
 
 end_of_function:
-    free(free_vars);
+    symbol_set_free(&free_vars);
     return ret_val;
 }
 

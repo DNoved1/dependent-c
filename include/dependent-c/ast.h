@@ -206,10 +206,13 @@ bool expr_equal(Expr x, Expr y);
 /* Make a deep copy of an expression. */
 Expr expr_copy(Expr x);
 
-/* Calculate the set of free variables in an expression. */
-void expr_free_vars(Expr expr, size_t *num_free, const char ***free);
-
 // Cyclical include problems...
+#include "dependent-c/symbol_table.h"
+
+/* Calculate the set of free variables in an expression. */
+void expr_free_vars(Expr expr, SymbolSet *set);
+
+// Cyclical include problems... again
 #include "dependent-c/general.h"
 
 /* Substitute a variable in an expression for an expression. */

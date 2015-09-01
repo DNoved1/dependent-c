@@ -238,50 +238,50 @@ bool symbol_table_lookup(SymbolTable *symbols,
 }
 
 /***** Symbol Sets ***********************************************************/
+SymbolSet symbol_set_empty(void) {
+    return (SymbolSet){
+          .size = 0
+        , .symbols = NULL
+    };
+}
+
+void symbol_set_free(SymbolSet *set) {
+    free(set->symbols);
+    memset(set, 0, sizeof *set);
+}
 
 /* Remove a symbol at an index from a symbol set. */
-static void symbol_set_remove(size_t *set_size, const char ***set,
-        size_t index) {
-    assert(*set_size > index);
+static void symbol_set_remove(SymbolSet *set, size_t index) {
+    assert(set->size > index);
 
-    memmove(*set + index, *set + index + 1,
-        (*set_size - index - 1) * sizeof **set);
-    *set = realloc(*set, (*set_size - 1) * sizeof **set);
-    *set_size -= 1;
+    memmove(&set->symbols[index], &set->symbols[index + 1],
+        (set->size - index - 1) * sizeof set->symbols[0]);
+    set->symbols = realloc(set->symbols,
+        (set->size - 1) * sizeof set->symbols[0]);
+    set->size -= 1;
 }
 
-void symbol_set_delete(size_t *set_size, const char ***set,
-        const char *delete) {
-    for (size_t i = 0; i < *set_size; i++) {
-        if (delete == (*set)[i]) {
-            symbol_set_remove(set_size, set, i);
+void symbol_set_delete(SymbolSet *set, const char *symbol) {
+    for (size_t i = 0; i < set->size; i++) {
+        if (symbol == set->symbols[i]) {
+            symbol_set_remove(set, i);
             break;
         }
     }
 }
 
-void symbol_set_add(size_t *set_size, const char ***set,
-        const char *add) {
-    bool unique = true;
-
-    for (size_t i = 0; i < *set_size; i++) {
-        if (add == (*set)[i]) {
-            unique = false;
-            break;
-        }
-    }
-
-    if (unique) {
-        *set = realloc(*set, (*set_size + 1) * sizeof **set);
-        (*set)[*set_size] = add;
-        *set_size += 1;
+void symbol_set_add(SymbolSet *set, const char *symbol) {
+    if (!symbol_set_contains(set, symbol)) {
+        set->symbols = realloc(set->symbols,
+            (set->size + 1) * sizeof set->symbols[0]);
+        set->symbols[set->size] = symbol;
+        set->size += 1;
     }
 }
 
-bool symbol_set_contains(size_t *set_size, const char ***set,
-        const char *symbol) {
-    for (size_t i = 0; i < *set_size; i++) {
-        if ((*set)[i] == symbol) {
+bool symbol_set_contains(const SymbolSet *set, const char *symbol) {
+    for (size_t i = 0; i < set->size; i++) {
+        if (set->symbols[i] == symbol) {
             return true;
         }
     }
@@ -289,24 +289,10 @@ bool symbol_set_contains(size_t *set_size, const char ***set,
     return false;
 }
 
-bool symbol_set_contains_any(size_t *set1_size, const char ***set1,
-        size_t *set2_size, const char ***set2) {
-    for (size_t i = 0; i < *set2_size; i++) {
-        if (symbol_set_contains(set1_size, set1, (*set2)[i])) {
-            return true;
-        }
+void symbol_set_union(SymbolSet *set1, SymbolSet *set2) {
+    for (size_t i = 0; i < set2->size; i++) {
+        symbol_set_add(set1, set2->symbols[i]);
     }
 
-    return false;
-}
-
-void symbol_set_union(size_t *set1_size, const char ***set1,
-        size_t *set2_size, const char ***set2) {
-    for (size_t i = 0; i < *set2_size; i++) {
-        symbol_set_add(set1_size, set1, (*set2)[i]);
-    }
-
-    free(*set2);
-    *set2 = NULL;
-    *set2_size = 0;
+    symbol_set_free(set2);
 }

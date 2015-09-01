@@ -12,62 +12,55 @@
 
 /***** Top Level Dependency Analysis *****************************************/
 
-static void block_free_vars(Block block, size_t*, const char***);
+static void block_free_vars(Block block, SymbolSet *free_vars);
 
-static void statement_free_vars(Statement statement,
-        size_t *num_free, const char ***free) {
-    size_t num_free_temp[1];
-    const char **free_temp[1];
+static void statement_free_vars(Statement statement, SymbolSet *free_vars) {
+    SymbolSet free_vars_temp[1];
 
     switch (statement.tag) {
       case STATEMENT_EMPTY:
-        *num_free = 0;
-        *free = NULL;
+        *free_vars = symbol_set_empty();
         break;
 
       case STATEMENT_EXPR:
       case STATEMENT_RETURN:
-        expr_free_vars(statement.expr, num_free, free);
+        expr_free_vars(statement.expr, free_vars);
         break;
 
       case STATEMENT_BLOCK:
-        block_free_vars(statement.block, num_free, free);
+        block_free_vars(statement.block, free_vars);
         break;
 
       case STATEMENT_DECL:
-        expr_free_vars(statement.decl.type, num_free, free);
+        expr_free_vars(statement.decl.type, free_vars);
         if (statement.decl.is_initialized) {
-            expr_free_vars(statement.decl.initial_value,
-                num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            expr_free_vars(statement.decl.initial_value, free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case STATEMENT_IFTHENELSE:
-        block_free_vars(statement.ifthenelse.else_, num_free, free);
+        block_free_vars(statement.ifthenelse.else_, free_vars);
         for (size_t i = 0; i < statement.ifthenelse.num_ifs; i++) {
-            expr_free_vars(statement.ifthenelse.ifs[i],
-                num_free_temp, free_temp);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
-            block_free_vars(statement.ifthenelse.thens[i], num_free, free);
-            symbol_set_union(num_free, free, num_free_temp, free_temp);
+            expr_free_vars(statement.ifthenelse.ifs[i], free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
+            block_free_vars(statement.ifthenelse.thens[i], free_vars);
+            symbol_set_union(free_vars, free_vars_temp);
         }
         break;
     }
 }
 
-static void block_free_vars(Block block, size_t *num_free, const char ***free) {
-    size_t num_free_temp[1];
-    const char **free_temp[1];
-    *num_free = 0;
-    *free = NULL;
+static void block_free_vars(Block block, SymbolSet *free_vars) {
+    SymbolSet free_vars_temp[1];
+    *free_vars = symbol_set_empty();
 
     for (size_t i = 0; i < block.num_statements; i++) {
         Statement statement = block.statements[block.num_statements - i - 1];
 
         switch (statement.tag) {
           case STATEMENT_DECL:
-            symbol_set_delete(num_free, free, statement.decl.name);
+            symbol_set_delete(free_vars, statement.decl.name);
             break;
 
           case STATEMENT_EMPTY:
@@ -78,15 +71,13 @@ static void block_free_vars(Block block, size_t *num_free, const char ***free) {
             break;
         }
 
-        statement_free_vars(statement, num_free_temp, free_temp);
-        symbol_set_union(num_free, free, num_free_temp, free_temp);
+        statement_free_vars(statement, free_vars_temp);
+        symbol_set_union(free_vars, free_vars_temp);
     }
 }
 
-static void top_level_free_vars(TopLevel top_level,
-        size_t *num_free, const char ***free) {
-    size_t num_free_temp[1];
-    const char **free_temp[1];
+static void top_level_free_vars(TopLevel top_level, SymbolSet *free_vars) {
+    SymbolSet free_vars_temp[1];
 
     switch (top_level.tag) {
       case TOP_LEVEL_FUNC:;
@@ -97,9 +88,9 @@ static void top_level_free_vars(TopLevel top_level,
             , .func_type.param_types = top_level.func.param_types
             , .func_type.param_names = top_level.func.param_names
         };
-        expr_free_vars(func_type, num_free, free);
-        block_free_vars(top_level.func.block, num_free_temp, free_temp);
-        symbol_set_union(num_free, free, num_free_temp, free_temp);
+        expr_free_vars(func_type, free_vars);
+        block_free_vars(top_level.func.block, free_vars_temp);
+        symbol_set_union(free_vars, free_vars_temp);
         break;
     }
 }
@@ -120,36 +111,37 @@ static void top_level_free_vars(TopLevel top_level,
 // declarations itself.
 bool top_level_topological_sort(size_t len, const TopLevel top_levels[len],
         size_t order[len]) {
-    size_t num_bound = 0;
-    const char **bound = NULL;
+    SymbolSet bound_vars = symbol_set_empty();
     bool result = true;
 
     for (size_t i = 0; i < len; i++) {
-        size_t num_free;
-        const char **free;
-        top_level_free_vars(top_levels[i], &num_free, &free);
+        SymbolSet free_vars;
+        top_level_free_vars(top_levels[i], &free_vars);
 
-        for (size_t j = 0; j < num_bound; j++) {
-            symbol_set_delete(&num_free, &free, bound[j]);
+        for (size_t j = 0; j < bound_vars.size; j++) {
+            symbol_set_delete(&free_vars, bound_vars.symbols[j]);
         }
 
-        if (num_free > 0) {
+        if (free_vars.size > 0) {
             result = false;
 
             fprintf(stderr,
                 "Declaration \"%s\" depends upon undeclared values ",
                 top_levels[i].name);
-            for (size_t j = 0; j < num_free; j++) {
-                if (j == num_free - 1) {
+            for (size_t j = 0; j < free_vars.size; j++) {
+                if (j == free_vars.size - 1) {
                     fprintf(stderr, ", and ");
                 } else if (j > 0) {
                     fprintf(stderr, ", ");
                 }
 
-                fprintf(stderr, "\"%s\"", free[j]);
+                fprintf(stderr, "\"%s\"", free_vars.symbols[j]);
             }
             fprintf(stderr, ".\n");
         }
+
+        symbol_set_add(&bound_vars, top_levels[i].name);
+        symbol_set_free(&free_vars);
     }
 
     if (result) {
@@ -157,6 +149,8 @@ bool top_level_topological_sort(size_t len, const TopLevel top_levels[len],
             order[i] = i;
         }
     }
+
+    symbol_set_free(&bound_vars);
 
     return result;
 }
@@ -437,18 +431,18 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
         // Determine which fields are depended upon
         bool field_depended_upon[struct_type.struct_.num_fields];
         for (size_t i = 0; i < struct_type.struct_.num_fields; i++) {
-            size_t num_free[1];
-            const char **free_vars[1];
-            expr_free_vars(struct_type.struct_.field_types[i],
-                num_free, free_vars);
+            SymbolSet free_vars[1];
+            expr_free_vars(struct_type.struct_.field_types[i], free_vars);
 
             field_depended_upon[i] = 0;
             for (size_t j = 0; j < i; j++) {
-                if (symbol_set_contains(num_free, free_vars,
+                if (symbol_set_contains(free_vars,
                         struct_type.struct_.field_names[j])) {
                     field_depended_upon[j] = true;
                 }
             }
+
+            symbol_set_free(free_vars);
         }
 
         // Ensure that depended upon fields are assigned
