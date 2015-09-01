@@ -60,10 +60,7 @@
         Expr assign;
     } pack_init;
 
-    struct {
-        size_t len;
-        Statement *statements;
-    } statement_list;
+    Block block;
 
     struct {
         size_t len;
@@ -113,7 +110,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %type <expr> equality_expr expr
 %type <statement> statement
 %type <if_list> else_if_parts
-%type <statement_list> else_part
+%type <block> else_part
 %type <top_level> top_level
 %type <unit> translation_unit
 
@@ -127,7 +124,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %type <pack_init_list> pack_init_list pack_init_list_
 %type <pack_init> pack_init
 
-%type <statement_list> statement_list block
+%type <block> statement_list block
 
 %%
 
@@ -302,8 +299,7 @@ statement:
         $$.expr = $2; }
     | block {
         $$.tag = STATEMENT_BLOCK;
-        $$.block.num_statements = $1.len;
-        $$.block.statements = $1.statements; }
+        $$.block = $1; }
     | expr TOK_IDENT ';' {
         $$.tag = STATEMENT_DECL;
         $$.decl.type = $1;
@@ -324,10 +320,8 @@ statement:
         $$.ifthenelse.ifs[0] = $3;
         $$.ifthenelse.thens = realloc($6.thens,
             ($6.len + 1) * sizeof *$$.ifthenelse.thens);
-        $$.ifthenelse.thens[0].num_statements = $5.len;
-        $$.ifthenelse.thens[0].statements = $5.statements;
-        $$.ifthenelse.else_.num_statements = $7.len;
-        $$.ifthenelse.else_.statements = $7.statements;
+        $$.ifthenelse.thens[0] = $5;
+        $$.ifthenelse.else_ = $7;
         $$.ifthenelse.num_ifs = $6.len + 1; }
     ;
 
@@ -341,14 +335,13 @@ else_if_parts:
         $$.ifs = realloc($$.ifs, ($$.len + 1) * sizeof *$$.ifs);
         $$.ifs[$$.len] = $5;
         $$.thens = realloc($$.thens, ($$.len + 1) * sizeof *$$.thens);
-        $$.thens[$$.len].num_statements = $7.len;
-        $$.thens[$$.len].statements = $7.statements;
+        $$.thens[$$.len] = $7;
         $$.len += 1; }
     ;
 
 else_part:
       %empty {
-        $$.len = 0;
+        $$.num_statements = 0;
         $$.statements = NULL; }
     | "else" block {
         $$ = $2; }
@@ -364,8 +357,7 @@ top_level:
         $$.func.num_params = $4.len;
         $$.func.param_types = $4.types;
         $$.func.param_names = $4.names;
-        $$.func.num_statements = $6.len;
-        $$.func.statements = $6.statements; }
+        $$.func.block = $6; }
     ;
 
 translation_unit:
@@ -484,14 +476,14 @@ block:
 
 statement_list:
       %empty {
-        $$.len = 0;
+        $$.num_statements = 0;
         $$.statements = NULL; }
     | statement_list statement {
         $$ = $1;
         $$.statements = realloc($$.statements,
-            ($$.len + 1) * sizeof *$$.statements);
-        $$.statements[$$.len] = $2;
-        $$.len += 1; }
+            ($$.num_statements + 1) * sizeof *$$.statements);
+        $$.statements[$$.num_statements] = $2;
+        $$.num_statements += 1; }
     ;
 
 %%

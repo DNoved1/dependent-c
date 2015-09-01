@@ -12,8 +12,7 @@
 
 /***** Top Level Dependency Analysis *****************************************/
 
-static void block_free_vars(size_t len, Statement[len],
-    size_t*, const char***);
+static void block_free_vars(Block block, size_t*, const char***);
 
 static void statement_free_vars(Statement statement,
         size_t *num_free, const char ***free) {
@@ -32,8 +31,7 @@ static void statement_free_vars(Statement statement,
         break;
 
       case STATEMENT_BLOCK:
-        block_free_vars(statement.block.num_statements,
-            statement.block.statements, num_free, free);
+        block_free_vars(statement.block, num_free, free);
         break;
 
       case STATEMENT_DECL:
@@ -46,29 +44,26 @@ static void statement_free_vars(Statement statement,
         break;
 
       case STATEMENT_IFTHENELSE:
-        block_free_vars(statement.ifthenelse.else_.num_statements,
-            statement.ifthenelse.else_.statements, num_free, free);
+        block_free_vars(statement.ifthenelse.else_, num_free, free);
         for (size_t i = 0; i < statement.ifthenelse.num_ifs; i++) {
             expr_free_vars(statement.ifthenelse.ifs[i],
                 num_free_temp, free_temp);
             symbol_set_union(num_free, free, num_free_temp, free_temp);
-            block_free_vars(statement.ifthenelse.thens[i].num_statements,
-                statement.ifthenelse.thens[i].statements, num_free, free);
+            block_free_vars(statement.ifthenelse.thens[i], num_free, free);
             symbol_set_union(num_free, free, num_free_temp, free_temp);
         }
         break;
     }
 }
 
-static void block_free_vars(size_t len, Statement block[len],
-        size_t *num_free, const char ***free) {
+static void block_free_vars(Block block, size_t *num_free, const char ***free) {
     size_t num_free_temp[1];
     const char **free_temp[1];
     *num_free = 0;
     *free = NULL;
 
-    for (size_t i = 0; i < len; i++) {
-        Statement statement = block[len - i - 1];
+    for (size_t i = 0; i < block.num_statements; i++) {
+        Statement statement = block.statements[block.num_statements - i - 1];
 
         switch (statement.tag) {
           case STATEMENT_DECL:
@@ -103,8 +98,7 @@ static void top_level_free_vars(TopLevel top_level,
             , .func_type.param_names = top_level.func.param_names
         };
         expr_free_vars(func_type, num_free, free);
-        block_free_vars(top_level.func.num_statements,
-            top_level.func.statements, num_free_temp, free_temp);
+        block_free_vars(top_level.func.block, num_free_temp, free_temp);
         symbol_set_union(num_free, free, num_free_temp, free_temp);
         break;
     }
@@ -848,16 +842,16 @@ bool type_check_top_level(Context *context, TopLevel top_level) {
                 top_level.func.param_types[i]);
         }
         bool returns = false, returns_temp;
-        for (size_t i = 0; i < top_level.func.num_statements; i++) {
+        for (size_t i = 0; i < top_level.func.block.num_statements; i++) {
             if (!type_check_statement(context,
-                    top_level.func.statements[i],
+                    top_level.func.block.statements[i],
                     top_level.func.ret_type,
                     &returns_temp)) {
                 symbol_table_leave_scope(&context->symbol_table);
                 return false;
             }
             returns |= returns_temp;
-            if (returns_temp && i != top_level.func.num_statements - 1) {
+            if (returns_temp && i != top_level.func.block.num_statements - 1) {
                 fprintf(stderr, "Warning: Dead code.\n");
             }
         }

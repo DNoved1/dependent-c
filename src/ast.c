@@ -686,10 +686,7 @@ void top_level_free(TopLevel *top_level) {
         }
         free(top_level->func.param_types);
         free(top_level->func.param_names);
-        for (size_t i = 0; i < top_level->func.num_statements; i++) {
-            statement_free(&top_level->func.statements[i]);
-        }
-        free(top_level->func.statements);
+        block_free(&top_level->func.block);
         break;
     }
     memset(top_level, 0, sizeof *top_level);
@@ -733,7 +730,6 @@ static void literal_pprint(FILE *to, int nesting, Literal literal) {
         fprintf(to, literal.boolean ? "true" : "false");
         break;
     }
-
 }
 
 static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
@@ -934,10 +930,7 @@ void top_level_pprint(FILE *to, TopLevel top_level) {
             }
         }
         fprintf(to, ") {\n");
-
-        for (size_t i = 0; i < top_level.func.num_statements; i++) {
-            statement_pprint(to, 1, top_level.func.statements[i]);
-        }
+        block_pprint(to, 1, top_level.func.block);
         fprintf(to, "}\n");
         break;
     }

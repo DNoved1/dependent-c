@@ -184,8 +184,7 @@ typedef struct {
             size_t num_params;
             Expr *param_types;
             const char **param_names;
-            size_t num_statements;
-            Statement *statements;
+            Block block;
         } func;
     };
 } TopLevel;
