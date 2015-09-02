@@ -1,10 +1,10 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "dependent-c/lex.h"
+#include "dependent-c/memory.h"
 
 /***** Strn Char Stream Implementation ***************************************/
 struct strn_char_stream_data {
@@ -27,22 +27,22 @@ int strn_char_stream_next(void *_self_data) {
 void strn_char_stream_free(void *_self_data) {
     struct strn_char_stream_data *self_data = _self_data;
 
-    free(self_data->str);
-    free(self_data);
+    dealloc(self_data->str);
+    dealloc(self_data);
 }
 
 CharStream strn_to_char_stream(const char *str, size_t len) {
     CharStream result;
     struct strn_char_stream_data self_data;
 
-    self_data.str = malloc(len + 1);
+    alloc_array(self_data.str, len + 1);
     memcpy(self_data.str, str, len);
     self_data.str[len] = '\0';
     self_data.i = 0;
 
     result.next = strn_char_stream_next;
     result.free = strn_char_stream_free;
-    result.self_data = malloc(sizeof self_data);
+    result.self_data = _alloc(__FILE__, __LINE__, sizeof self_data);
     *(struct strn_char_stream_data*)result.self_data = self_data;
     result.peeked_cap = 0;
     result.peeked_len = 0;
@@ -98,8 +98,7 @@ void char_stream_push(CharStream *stream, int c) {
     }
 
     if (stream->peeked_len + 1 > stream->peeked_cap) {
-        stream->peeked = realloc(stream->peeked,
-            (stream->peeked_len + 1) * sizeof *stream->peeked);
+        realloc_array(stream->peeked, stream->peeked_len + 1);
         stream->peeked_cap = stream->peeked_len + 1;
     }
 

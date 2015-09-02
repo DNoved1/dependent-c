@@ -2,11 +2,11 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "dependent-c/ast.h"
 #include "dependent-c/general.h"
+#include "dependent-c/memory.h"
 #include "dependent-c/symbol_table.h"
 #include "dependent-c/type.h"
 
@@ -686,7 +686,7 @@ bool type_infer(Context *context, Expr expr, Expr *result) {
             return false;
         }
         result->tag = EXPR_POINTER;
-        result->pointer = malloc(sizeof temp);
+        alloc(result->pointer);
         *result->pointer = temp;
         return true;
 

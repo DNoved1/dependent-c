@@ -1,8 +1,8 @@
 #include <assert.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "dependent-c/ast.h"
+#include "dependent-c/memory.h"
 #include "dependent-c/symbol_table.h"
 
 /***** Symbol Interning ******************************************************/
@@ -25,8 +25,9 @@ static void symbol_resize_if_needed(InternedSymbols *interns) {
         struct InternedSymbolsTable *old_symbols = interns->symbols;
 
         size_t new_cap = old_cap * 2 + 1;
-        struct InternedSymbolsTable *new_symbols = calloc(new_cap,
-            sizeof *new_symbols);
+        struct InternedSymbolsTable *new_symbols;
+        alloc_array(new_symbols, new_cap);
+        memset(new_symbols, 0, sizeof *new_symbols * new_cap);
 
         for (size_t i = 0; i < old_cap; i++) {
             if (old_symbols[i].symbol != NULL) {
@@ -47,7 +48,7 @@ static void symbol_resize_if_needed(InternedSymbols *interns) {
         interns->symbols = new_symbols;
 
         memset(old_symbols, 0, old_cap * sizeof *old_symbols);
-        free(old_symbols);
+        dealloc(old_symbols);
     }
 }
 
@@ -62,12 +63,12 @@ InternedSymbols symbol_new(void) {
 void symbol_free_all(InternedSymbols *interns) {
     for (size_t i = 0; i < interns->cap; i++) {
         if (interns->symbols[i].symbol != NULL) {
-            free(interns->symbols[i].symbol);
+            dealloc(interns->symbols[i].symbol);
             memset(&interns->symbols[i], 0, sizeof interns->symbols[i]);
         }
     }
 
-    free(interns->symbols);
+    dealloc(interns->symbols);
     memset(interns, 0, sizeof *interns);
 }
 
@@ -79,7 +80,8 @@ const char *symbol_intern(InternedSymbols *interns, const char *str) {
 
     while (true) {
         if (interns->symbols[index].symbol == NULL) {
-            char *str_copy = malloc(strlen(str) + 1);
+            char *str_copy;
+            alloc_array(str_copy, strlen(str) + 1);
             strcpy(str_copy, str);
 
             interns->symbols[index].hash = hash;
@@ -103,12 +105,12 @@ start_of_function:;
     while (true) {
         if (interns->symbols[index].symbol == NULL) {
             const char *result = symbol_intern(interns, str);
-            free(str);
+            dealloc(str);
             return result;
         } else if (hash == interns->symbols[index].hash
                 && strcmp(str, interns->symbols[index].symbol) == 0) {
             size_t len = strlen(str);
-            str = realloc(str, len + 2);
+            realloc_array(str, len + 2);
             str[len] = '_';
             str[len + 1] = '\0';
             goto start_of_function;
@@ -119,8 +121,8 @@ start_of_function:;
 }
 
 const char *symbol_gensym(InternedSymbols *interns, const char *str) {
-    size_t len = strlen(str);
-    char *str_copy = malloc(len + 1);
+    char *str_copy;
+    alloc_array(str_copy, strlen(str) + 1);
     strcpy(str_copy, str);
     return symbol_gensym_(interns, str_copy);
 }
@@ -138,21 +140,20 @@ SymbolTable symbol_table_new(void) {
 }
 
 void symbol_table_free(SymbolTable *symbols) {
-    free(symbols->global_names);
-    free(symbols->global_types);
+    dealloc(symbols->global_names);
+    dealloc(symbols->global_types);
 
     for (size_t i = 0; i < symbols->locals_stack_size; i++) {
-        free(symbols->locals_stack[i].local_names);
-        free(symbols->locals_stack[i].local_types);
+        dealloc(symbols->locals_stack[i].local_names);
+        dealloc(symbols->locals_stack[i].local_types);
     }
-    free(symbols->locals_stack);
+    dealloc(symbols->locals_stack);
 
     memset(symbols, 0, sizeof *symbols);
 }
 
 void symbol_table_enter_scope(SymbolTable *symbols) {
-    symbols->locals_stack = realloc(symbols->locals_stack,
-        (symbols->locals_stack_size + 1) * sizeof *symbols->locals_stack);
+    realloc_array(symbols->locals_stack, symbols->locals_stack_size + 1);
     symbols->locals_stack[symbols->locals_stack_size].num_locals = 0;
     symbols->locals_stack[symbols->locals_stack_size].local_names = NULL;
     symbols->locals_stack[symbols->locals_stack_size].local_types = NULL;
@@ -162,8 +163,8 @@ void symbol_table_enter_scope(SymbolTable *symbols) {
 void symbol_table_leave_scope(SymbolTable *symbols) {
     assert(symbols->locals_stack_size > 0);
 
-    free(symbols->locals_stack[symbols->locals_stack_size - 1].local_names);
-    free(symbols->locals_stack[symbols->locals_stack_size - 1].local_types);
+    dealloc(symbols->locals_stack[symbols->locals_stack_size - 1].local_names);
+    dealloc(symbols->locals_stack[symbols->locals_stack_size - 1].local_types);
     symbols->locals_stack_size -= 1;
     // Not reallocing to smaller size here since we'll likely reuse the the
     // space later.
@@ -177,11 +178,9 @@ bool symbol_table_register_global(SymbolTable *symbols,
         }
     }
 
-    symbols->global_names = realloc(symbols->global_names,
-        (symbols->num_globals + 1) * sizeof *symbols->global_names);
+    realloc_array(symbols->global_names, symbols->num_globals + 1);
     symbols->global_names[symbols->num_globals] = name;
-    symbols->global_types = realloc(symbols->global_types,
-        (symbols->num_globals + 1) * sizeof *symbols->global_types);
+    realloc_array(symbols->global_types, symbols->num_globals + 1);
     symbols->global_types[symbols->num_globals] = type;
 
     symbols->num_globals += 1;
@@ -201,13 +200,9 @@ bool symbol_table_register_local(SymbolTable *symbols,
         }
     }
 
-    symbols->locals_stack[index].local_names = realloc(
-        symbols->locals_stack[index].local_names,
-        (num_locals + 1) * sizeof *symbols->locals_stack[index].local_names);
+    realloc_array(symbols->locals_stack[index].local_names, num_locals + 1);
     symbols->locals_stack[index].local_names[num_locals] = name;
-    symbols->locals_stack[index].local_types = realloc(
-        symbols->locals_stack[index].local_types,
-        (num_locals + 1) * sizeof *symbols->locals_stack[index].local_types);
+    realloc_array(symbols->locals_stack[index].local_types, num_locals + 1);
     symbols->locals_stack[index].local_types[num_locals] = type;
 
     symbols->locals_stack[index].num_locals = num_locals + 1;
@@ -246,7 +241,7 @@ SymbolSet symbol_set_empty(void) {
 }
 
 void symbol_set_free(SymbolSet *set) {
-    free(set->symbols);
+    dealloc(set->symbols);
     memset(set, 0, sizeof *set);
 }
 
@@ -256,8 +251,7 @@ static void symbol_set_remove(SymbolSet *set, size_t index) {
 
     memmove(&set->symbols[index], &set->symbols[index + 1],
         (set->size - index - 1) * sizeof set->symbols[0]);
-    set->symbols = realloc(set->symbols,
-        (set->size - 1) * sizeof set->symbols[0]);
+    realloc_array(set->symbols, set->size - 1);
     set->size -= 1;
 }
 
@@ -272,8 +266,7 @@ void symbol_set_delete(SymbolSet *set, const char *symbol) {
 
 void symbol_set_add(SymbolSet *set, const char *symbol) {
     if (!symbol_set_contains(set, symbol)) {
-        set->symbols = realloc(set->symbols,
-            (set->size + 1) * sizeof set->symbols[0]);
+        realloc_array(set->symbols, set->size + 1);
         set->symbols[set->size] = symbol;
         set->size += 1;
     }

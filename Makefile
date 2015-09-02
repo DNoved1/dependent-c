@@ -1,6 +1,6 @@
 #=== Shared Definitions =======================================================
 OBJECTS = $(addprefix bin/, \
-	general.o \
+	memory.o general.o \
 	lex.o grammar/dependent-c.y.o \
 	ast.o symbol_table.o type.o )
 

@@ -2,12 +2,12 @@
 #include <ctype.h>  /* isspace, isalpha, isalnum, isdigit */
 #include <stdbool.h> /* true, false */
 #include <stdint.h> /* unint64_t */
-#include <stdlib.h> /* malloc, realloc, free */
 #include <string.h> /* strcmp */
 
-#include "dependent-c/lex.h"
 #include "dependent-c/ast.h"
 #include "dependent-c/general.h"
+#include "dependent-c/lex.h"
+#include "dependent-c/memory.h"
 %}
 
 %define api.pure full
@@ -175,29 +175,29 @@ postfix_expr:
       simple_expr
     | postfix_expr '*' {
         $$.tag = EXPR_POINTER;
-        $$.pointer = malloc(sizeof $1);
+        alloc($$.pointer);
         *$$.pointer = $1; }
     | postfix_expr '.' TOK_IDENT {
         $$.tag = EXPR_MEMBER;
-        $$.member.record = malloc(sizeof $1);
+        alloc($$.member.record);
         *$$.member.record = $1;
         $$.member.field = $3; }
     | postfix_expr '(' arg_list ')' {
         $$.tag = EXPR_CALL;
-        $$.call.func = malloc(sizeof $1);
+        alloc($$.call.func);
         *$$.call.func = $1;
         $$.call.num_args = $3.len;
         $$.call.args = $3.args; }
     | postfix_expr '[' param_list ']' {
         $$.tag = EXPR_FUNC_TYPE;
-        $$.func_type.ret_type = malloc(sizeof $1);
+        alloc($$.func_type.ret_type);
         *$$.func_type.ret_type = $1;
         $$.func_type.num_params = $3.len;
         $$.func_type.param_types = $3.types;
         $$.func_type.param_names = $3.names; }
     | '(' expr ')' '{' pack_init_list '}' {
         $$.tag = EXPR_PACK;
-        $$.pack.type = malloc(sizeof $2);
+        alloc($$.pack.type);
         *$$.pack.type = $2;
         $$.pack.num_assigns = $5.len;
         $$.pack.field_names = $5.field_names;
@@ -208,11 +208,11 @@ prefix_expr:
       postfix_expr
     | '&' prefix_expr {
         $$.tag = EXPR_REFERENCE;
-        $$.reference = malloc(sizeof $2);
+        alloc($$.reference);
         *$$.reference = $2; }
     | '*' prefix_expr {
         $$.tag = EXPR_DEREFERENCE;
-        $$.dereference = malloc(sizeof $2);
+        alloc($$.dereference);
         *$$.dereference = $2; }
     ;
 
@@ -221,16 +221,16 @@ add_expr:
     | add_expr '+' prefix_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_ADD;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     | add_expr '-' prefix_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_SUB;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     ;
 
@@ -239,30 +239,30 @@ relational_expr:
     | relational_expr '<' add_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_LT;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     | relational_expr "<=" add_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_LTE;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     | relational_expr '>' add_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_GT;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     | relational_expr ">=" add_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_GTE;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     ;
 
@@ -271,16 +271,16 @@ equality_expr:
     | equality_expr "==" relational_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_EQ;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     | equality_expr "!=" relational_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_NE;
-        $$.bin_op.expr1 = malloc(sizeof $1);
+        alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
-        $$.bin_op.expr2 = malloc(sizeof $3);
+        alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
     ;
 
@@ -313,13 +313,15 @@ statement:
         $$.decl.initial_value = $4; }
     | "if" '(' expr ')' block else_if_parts else_part {
         $$.tag = STATEMENT_IFTHENELSE;
-        $$.ifthenelse.ifs = realloc($6.ifs,
-            ($6.len + 1) * sizeof *$$.ifthenelse.ifs);
+        $$.ifthenelse.ifs = $6.ifs;
+        realloc_array($$.ifthenelse.ifs, $6.len + 1);
         memmove(&$$.ifthenelse.ifs[1], &$$.ifthenelse.ifs[0],
             $6.len * sizeof *$$.ifthenelse.ifs);
         $$.ifthenelse.ifs[0] = $3;
-        $$.ifthenelse.thens = realloc($6.thens,
-            ($6.len + 1) * sizeof *$$.ifthenelse.thens);
+        $$.ifthenelse.thens = $6.thens;
+        realloc_array($$.ifthenelse.thens, $6.len + 1);
+        memmove(&$$.ifthenelse.thens[1], &$$.ifthenelse.thens[0],
+            $6.len * sizeof &$$.ifthenelse.thens);
         $$.ifthenelse.thens[0] = $5;
         $$.ifthenelse.else_ = $7;
         $$.ifthenelse.num_ifs = $6.len + 1; }
@@ -332,9 +334,9 @@ else_if_parts:
         $$.thens = NULL; }
     | else_if_parts "else" "if" '(' expr ')' block {
         $$ = $1;
-        $$.ifs = realloc($$.ifs, ($$.len + 1) * sizeof *$$.ifs);
+        realloc_array($$.ifs, $$.len + 1);
         $$.ifs[$$.len] = $5;
-        $$.thens = realloc($$.thens, ($$.len + 1) * sizeof *$$.thens);
+        realloc_array($$.thens, $$.len + 1);
         $$.thens[$$.len] = $7;
         $$.len += 1; }
     ;
@@ -366,8 +368,7 @@ translation_unit:
         $$.top_levels = NULL; }
     | translation_unit top_level {
         $$ = $1;
-        $$.top_levels = realloc($$.top_levels,
-            ($$.num_top_levels + 1) * sizeof *$$.top_levels);
+        realloc_array($$.top_levels, $$.num_top_levels + 1);
         $$.top_levels[$$.num_top_levels] = $2;
         $$.num_top_levels += 1; }
     ;
@@ -379,9 +380,9 @@ type_ident_list:
         $$.idents = NULL; }
     | type_ident_list type_ident {
         $$ = $1;
-        $$.types = realloc($$.types, ($$.len + 1) * sizeof *$$.types);
+        realloc_array($$.types, $$.len + 1);
         $$.types[$$.len] = $2.type;
-        $$.idents = realloc($$.idents, ($$.len + 1) * sizeof *$$.idents);
+        realloc_array($$.idents, $$.len + 1);
         $$.idents[$$.len] = $2.ident;
         $$.len += 1; }
     ;
@@ -401,15 +402,15 @@ param_list:
 param_list_:
       param  {
         $$.len = 1;
-        $$.types = malloc(sizeof *$$.types);
+        alloc_array($$.types, 1);
         $$.types[0] = $1.type;
-        $$.names = malloc(sizeof *$$.names);
+        alloc_array($$.names, 1);
         $$.names[0] = $1.name; }
     | param_list_ ',' param {
         $$ = $1;
-        $$.types = realloc($$.types, ($$.len + 1) * sizeof *$$.types);
+        realloc_array($$.types, $$.len + 1);
         $$.types[$$.len] = $3.type;
-        $$.names = realloc($$.names, ($$.len + 1) * sizeof *$$.names);
+        realloc_array($$.names, $$.len + 1);
         $$.names[$$.len] = $3.name;
         $$.len += 1; }
     ;
@@ -431,11 +432,11 @@ arg_list:
 arg_list_:
       expr {
         $$.len = 1;
-        $$.args = malloc(sizeof *$$.args);
+        alloc_array($$.args, 1);
         $$.args[0] = $1; }
     | arg_list_ ',' expr {
         $$ = $1;
-        $$.args = realloc($$.args, ($$.len + 1) * sizeof *$$.args);
+        realloc_array($$.args, $$.len + 1);
         $$.args[$$.len] = $3;
         $$.len += 1; }
     ;
@@ -450,16 +451,15 @@ pack_init_list:
 pack_init_list_:
       pack_init {
         $$.len = 1;
-        $$.field_names = malloc(sizeof *$$.field_names);
+        alloc_array($$.field_names, 1);
         $$.field_names[0] = $1.field_name;
-        $$.assigns = malloc(sizeof *$$.assigns);
+        alloc_array($$.assigns, 1);
         $$.assigns[0] = $1.assign; }
     | pack_init_list_ ',' pack_init {
         $$ = $1;
-        $$.field_names = realloc($$.field_names,
-            ($$.len + 1) * sizeof *$$.field_names);
+        realloc_array($$.field_names, $$.len + 1);
         $$.field_names[$$.len] = $3.field_name;
-        $$.assigns = realloc($$.assigns, ($$.len + 1) * sizeof *$$.assigns);
+        realloc_array($$.assigns, $$.len + 1);
         $$.assigns[$$.len] = $3.assign;
         $$.len += 1; }
     ;
@@ -480,8 +480,7 @@ statement_list:
         $$.statements = NULL; }
     | statement_list statement {
         $$ = $1;
-        $$.statements = realloc($$.statements,
-            ($$.num_statements + 1) * sizeof *$$.statements);
+        realloc_array($$.statements, $$.num_statements + 1);
         $$.statements[$$.num_statements] = $2;
         $$.num_statements += 1; }
     ;
@@ -540,7 +539,7 @@ start_of_function:;
             c = token_stream_pop_char(stream);
 
             if (isalnum(c) || c == '_') {
-                ident = realloc(ident, len + 1);
+                realloc_array(ident, len + 1);
                 ident[len] = c;
                 len += 1;
             } else {
@@ -549,12 +548,12 @@ start_of_function:;
             }
         }
 
-        ident = realloc(ident, len + 1);
+        realloc_array(ident, len + 1);
         ident[len] = '\0';
 
 #define check_is_reserved(word, then) \
     else if (strcmp(#word, ident) == 0) { \
-        free(ident); \
+        dealloc(ident); \
         return then; \
     }
 

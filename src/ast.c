@@ -2,11 +2,11 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "dependent-c/ast.h"
 #include "dependent-c/general.h"
+#include "dependent-c/memory.h"
 #include "dependent-c/symbol_table.h"
 
 /***** Expression Management *************************************************/
@@ -174,20 +174,18 @@ Expr expr_copy(Expr x) {
 
       case EXPR_BIN_OP:
         y.bin_op.op = x.bin_op.op;
-        y.bin_op.expr1 = malloc(sizeof *y.bin_op.expr1);
+        alloc(y.bin_op.expr1);
         *y.bin_op.expr1 = expr_copy(*x.bin_op.expr1);
-        y.bin_op.expr2 = malloc(sizeof *y.bin_op.expr2);
+        alloc(y.bin_op.expr2);
         *y.bin_op.expr2 = expr_copy(*x.bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:
-        y.func_type.ret_type = malloc(sizeof *y.func_type.ret_type);
+        alloc(y.func_type.ret_type);
         *y.func_type.ret_type = expr_copy(*x.func_type.ret_type);
         y.func_type.num_params = x.func_type.num_params;
-        y.func_type.param_types = calloc(
-            sizeof *y.func_type.param_types, y.func_type.num_params);
-        y.func_type.param_names = calloc(
-            sizeof *y.func_type.param_names, y.func_type.num_params);
+        alloc_array(y.func_type.param_types, y.func_type.num_params);
+        alloc_array(y.func_type.param_names, y.func_type.num_params);
         for (size_t i = 0; i < y.func_type.num_params; i++) {
             y.func_type.param_types[i] = expr_copy(x.func_type.param_types[i]);
             y.func_type.param_names[i] = x.func_type.param_names[i];
@@ -195,10 +193,10 @@ Expr expr_copy(Expr x) {
         break;
 
       case EXPR_CALL:
-        y.call.func = malloc(sizeof *y.call.func);
+        alloc(y.call.func);
         *y.call.func = expr_copy(*x.call.func);
         y.call.num_args = x.call.num_args;
-        y.call.args = calloc(sizeof *y.call.args, y.call.num_args);
+        alloc_array(y.call.args, y.call.num_args);
         for (size_t i = 0; i < y.call.num_args; i++) {
             y.call.args[i] = expr_copy(x.call.args[i]);
         }
@@ -206,10 +204,8 @@ Expr expr_copy(Expr x) {
 
       case EXPR_STRUCT:
         y.struct_.num_fields = x.struct_.num_fields;
-        y.struct_.field_types = calloc(sizeof *y.struct_.field_types,
-            y.struct_.num_fields);
-        y.struct_.field_names = calloc(sizeof *y.struct_.field_names,
-            y.struct_.num_fields);
+        alloc_array(y.struct_.field_types, y.struct_.num_fields);
+        alloc_array(y.struct_.field_names, y.struct_.num_fields);
         for (size_t i = 0; i < y.struct_.num_fields; i++) {
             y.struct_.field_types[i] = expr_copy(x.struct_.field_types[i]);
             y.struct_.field_names[i] = x.struct_.field_names[i];
@@ -218,10 +214,8 @@ Expr expr_copy(Expr x) {
 
       case EXPR_UNION:
         y.union_.num_fields = x.union_.num_fields;
-        y.union_.field_types = calloc(sizeof *y.union_.field_types,
-            y.union_.num_fields);
-        y.union_.field_names = calloc(sizeof *y.union_.field_names,
-            y.union_.num_fields);
+        alloc_array(y.union_.field_types, y.union_.num_fields);
+        alloc_array(y.union_.field_names, y.union_.num_fields);
         for (size_t i = 0; i < y.union_.num_fields; i++) {
             y.union_.field_types[i] = expr_copy(x.union_.field_types[i]);
             y.union_.field_names[i] = x.union_.field_names[i];
@@ -229,13 +223,11 @@ Expr expr_copy(Expr x) {
         break;
 
       case EXPR_PACK:
-        y.pack.type = malloc(sizeof *y.pack.type);
+        alloc(y.pack.type);
         *y.pack.type = expr_copy(*x.pack.type);
         y.pack.num_assigns = x.pack.num_assigns;
-        y.pack.field_names = calloc(sizeof *y.pack.field_names,
-            y.pack.num_assigns);
-        y.pack.assigns = calloc(sizeof *y.pack.assigns,
-            y.pack.num_assigns);
+        alloc_array(y.pack.field_names, y.pack.num_assigns);
+        alloc_array(y.pack.assigns, y.pack.num_assigns);
         for (size_t i = 0; i < y.pack.num_assigns; i++) {
             y.pack.field_names[i] = x.pack.field_names[i];
             y.pack.assigns[i] = expr_copy(x.pack.assigns[i]);
@@ -243,23 +235,23 @@ Expr expr_copy(Expr x) {
         break;
 
       case EXPR_MEMBER:
-        y.member.record = malloc(sizeof *y.member.record);
+        alloc(y.member.record);
         *y.member.record = expr_copy(*x.member.record);
         y.member.field = x.member.field;
         break;
 
       case EXPR_POINTER:
-        y.pointer = malloc(sizeof *y.pointer);
+        alloc(y.pointer);
         *y.pointer = expr_copy(*x.pointer);
         break;
 
       case EXPR_REFERENCE:
-        y.reference = malloc(sizeof *y.reference);
+        alloc(y.reference);
         *y.reference = expr_copy(*x.reference);
         break;
 
       case EXPR_DEREFERENCE:
-        y.dereference = malloc(sizeof *y.dereference);
+        alloc(y.dereference);
         *y.dereference = expr_copy(*x.dereference);
         break;
     }
@@ -559,67 +551,67 @@ void expr_free(Expr *expr) {
 
       case EXPR_FUNC_TYPE:
         expr_free(expr->func_type.ret_type);
-        free(expr->func_type.ret_type);
+        dealloc(expr->func_type.ret_type);
         for (size_t i = 0; i < expr->func_type.num_params; i++) {
             expr_free(&expr->func_type.param_types[i]);
         }
-        free(expr->func_type.param_types);
-        free(expr->func_type.param_names);
+        dealloc(expr->func_type.param_types);
+        dealloc(expr->func_type.param_names);
         break;
 
       case EXPR_CALL:
         expr_free(expr->call.func);
-        free(expr->call.func);
+        dealloc(expr->call.func);
         for (size_t i = 0; i < expr->call.num_args; i++) {
             expr_free(&expr->call.args[i]);
         }
-        free(expr->call.args);
+        dealloc(expr->call.args);
         break;
 
       case EXPR_STRUCT:
         for (size_t i = 0; i < expr->struct_.num_fields; i++) {
             expr_free(&expr->struct_.field_types[i]);
         }
-        free(expr->struct_.field_types);
-        free(expr->struct_.field_names);
+        dealloc(expr->struct_.field_types);
+        dealloc(expr->struct_.field_names);
         break;
 
       case EXPR_UNION:
         for (size_t i = 0; i < expr->union_.num_fields; i++) {
             expr_free(&expr->union_.field_types[i]);
         }
-        free(expr->union_.field_types);
-        free(expr->union_.field_names);
+        dealloc(expr->union_.field_types);
+        dealloc(expr->union_.field_names);
         break;
 
       case EXPR_PACK:
         expr_free(expr->pack.type);
-        free(expr->pack.type);
+        dealloc(expr->pack.type);
         for (size_t i = 0; i < expr->pack.num_assigns; i++) {
             expr_free(&expr->pack.assigns[i]);
         }
-        free(expr->pack.field_names);
-        free(expr->pack.assigns);
+        dealloc(expr->pack.field_names);
+        dealloc(expr->pack.assigns);
         break;
 
       case EXPR_MEMBER:
         expr_free(expr->member.record);
-        free(expr->member.record);
+        dealloc(expr->member.record);
         break;
 
       case EXPR_POINTER:
         expr_free(expr->pointer);
-        free(expr->pointer);
+        dealloc(expr->pointer);
         break;
 
       case EXPR_REFERENCE:
         expr_free(expr->reference);
-        free(expr->reference);
+        dealloc(expr->reference);
         break;
 
       case EXPR_DEREFERENCE:
         expr_free(expr->dereference);
-        free(expr->dereference);
+        dealloc(expr->dereference);
         break;
     }
     memset(expr, 0, sizeof *expr);
@@ -651,8 +643,8 @@ void statement_free(Statement *statement) {
             expr_free(&statement->ifthenelse.ifs[i]);
             block_free(&statement->ifthenelse.thens[i]);
         }
-        free(statement->ifthenelse.ifs);
-        free(statement->ifthenelse.thens);
+        dealloc(statement->ifthenelse.ifs);
+        dealloc(statement->ifthenelse.thens);
         block_free(&statement->ifthenelse.else_);
         break;
     }
@@ -663,7 +655,7 @@ void block_free(Block *block) {
     for (size_t i = 0; i < block->num_statements; i++) {
         statement_free(&block->statements[i]);
     }
-    free(block->statements);
+    dealloc(block->statements);
     memset(block, 0, sizeof *block);
 }
 
@@ -674,8 +666,8 @@ void top_level_free(TopLevel *top_level) {
         for (size_t i = 0; i < top_level->func.num_params; i++) {
             expr_free(&top_level->func.param_types[i]);
         }
-        free(top_level->func.param_types);
-        free(top_level->func.param_names);
+        dealloc(top_level->func.param_types);
+        dealloc(top_level->func.param_names);
         block_free(&top_level->func.block);
         break;
     }
@@ -686,7 +678,7 @@ void translation_unit_free(TranslationUnit *unit) {
     for (size_t i = 0; i < unit->num_top_levels; i++) {
         top_level_free(&unit->top_levels[i]);
     }
-    free(unit->top_levels);
+    dealloc(unit->top_levels);
     memset(unit, 0, sizeof *unit);
 }
 
