@@ -10,6 +10,10 @@ static size_t size_t_min(size_t x, size_t y) {
     return x < y ? x : y;
 }
 
+static size_t size_t_max(size_t x, size_t y) {
+    return x > y ? x : y;
+}
+
 // Using the first few characters as the hash here since most symbols tend to
 // be short. Might be worthwhile changing later since many other symbols will
 // be longer with the same prefix, as exhibited by the code here.
@@ -230,6 +234,61 @@ bool symbol_table_lookup(SymbolTable *symbols,
     }
 
     return false;
+}
+
+void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
+    fprintf(to, "Global Symbols\n");
+
+    size_t max_name_len = 0;
+    for (size_t i = 0; i < symbols->num_globals; i++) {
+        max_name_len = size_t_max(max_name_len,
+            strlen(symbols->global_names[i]));
+    }
+
+    for (size_t i = 0; i < symbols->num_globals; i++) {
+        fprintf(to, "    ");
+        int written = fprintf(to, "%s", symbols->global_names[i]);
+        if (written < 0 || written > max_name_len) {
+            putc(' ', to);
+        } else {
+            for (size_t j = 0; j < max_name_len - (unsigned)written; j++) {
+                putc(' ', to);
+            }
+        }
+
+        fprintf(to, " => ");
+        expr_pprint(to, symbols->global_types[i]);
+        fprintf(to, "\n");
+    }
+
+    fprintf(to, "Local Symbols\n");
+
+    for (size_t i = 0; i < symbols->locals_stack_size; i++) {
+        fprintf(to, "  Context %zu\n", i);
+
+        max_name_len = 0;
+        for (size_t j = 0; j < symbols->locals_stack[i].num_locals; j++) {
+            max_name_len = size_t_max(max_name_len,
+                strlen(symbols->locals_stack[i].local_names[j]));
+        }
+
+        for (size_t j = 0; j < symbols->locals_stack[i].num_locals; j++) {
+            fprintf(to, "    ");
+            int written = fprintf(to, "%s",
+                symbols->locals_stack[i].local_names[j]);
+            if (written < 0 || written > max_name_len) {
+                putc(' ', to);
+            } else {
+                for (size_t k = 0; k < max_name_len - (unsigned)written; k++) {
+                    putc(' ', to);
+                }
+            }
+
+            fprintf(to, " => ");
+            expr_pprint(to, symbols->locals_stack[i].local_types[j]);
+            fprintf(to, "\n");
+        }
+    }
 }
 
 /***** Symbol Sets ***********************************************************/

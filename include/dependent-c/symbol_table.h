@@ -57,6 +57,9 @@ bool symbol_table_register_local(SymbolTable *symbols,
 bool symbol_table_lookup(SymbolTable *symbols,
     const char *name, Expr *result);
 
+/* Print the contents of the symbol table. */
+void symbol_table_pprint(FILE *to, const SymbolTable *symbols);
+
 /***** Symbol Sets ***********************************************************/
 
 typedef struct {
