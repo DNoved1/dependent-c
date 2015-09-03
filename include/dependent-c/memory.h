@@ -54,4 +54,12 @@ void *_realloc_array(const char *file, int line, void *array,
     size_t size, size_t len);
 void *_dealloc(const char *file, int line, void *ptr, size_t size);
 
+/* Useful for checking if memory has been leaked if you return to a point at
+ * which all allocated memory should have been released. */
+size_t amount_allocated(void);
+
+/* Useful for identifying the sources of those leaks, or just in general to
+ * see how much memory everything is using. */
+void print_allocation_info(FILE *to);
+
 #endif /* DEPENDENT_C_MEMORY_H */

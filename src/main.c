@@ -3,6 +3,7 @@
 #include "dependent-c/lex.h"
 #include "dependent-c/ast.h"
 #include "dependent-c/general.h"
+#include "dependent-c/memory.h"
 #include "dependent-c/type.h"
 
 int yyparse(Context *);
@@ -28,6 +29,9 @@ int main(void) {
     }
 
     context_free(&context);
+
+    putchar('\n');
+    print_allocation_info(stdout);
 
     return ret_value;
 }
