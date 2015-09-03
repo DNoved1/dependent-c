@@ -14,10 +14,10 @@
 bool top_level_topological_sort(size_t len, const TopLevel top_levels[len],
     size_t order[len]);
 
-bool type_check(Context *context, Expr expr, Expr type);
-bool type_infer(Context *context, Expr expr, Expr *result);
-bool type_equal(Context *context, Expr type1, Expr type2);
+bool type_check(Context *context, const Expr *expr, const Expr *type);
+bool type_infer(Context *context, const Expr *expr, Expr *result);
+bool type_equal(Context *context, const Expr *type1, const Expr *type2);
 
-bool type_check_top_level(Context *context, TopLevel top_level);
+bool type_check_top_level(Context *context, const TopLevel *top_level);
 
 #endif /* DEPENDENT_C_TYPE_H */

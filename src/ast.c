@@ -37,260 +37,255 @@ static bool literal_equal(Literal x, Literal y) {
     }
 }
 
-bool expr_equal(Expr x, Expr y) {
-    if (x.tag != y.tag) {
+bool expr_equal(const Expr *x, const Expr *y) {
+    if (x->tag != y->tag) {
         return false;
     }
 
-    switch (x.tag) {
+    switch (x->tag) {
       case EXPR_LITERAL:
-        return literal_equal(x.literal, y.literal);
+        return literal_equal(x->literal, y->literal);
 
       case EXPR_IDENT:
-        return x.ident == y.ident;
+        return x->ident == y->ident;
 
       case EXPR_BIN_OP:
-        return x.bin_op.op != y.bin_op.op
-            && expr_equal(*x.bin_op.expr1, *y.bin_op.expr1)
-            && expr_equal(*x.bin_op.expr2, *y.bin_op.expr2);
+        return x->bin_op.op != y->bin_op.op
+            && expr_equal(x->bin_op.expr1, y->bin_op.expr1)
+            && expr_equal(x->bin_op.expr2, y->bin_op.expr2);
 
       case EXPR_FUNC_TYPE:
-        if (!expr_equal(*x.func_type.ret_type, *y.func_type.ret_type)
-                || x.func_type.num_params != y.func_type.num_params) {
+        if (!expr_equal(x->func_type.ret_type, y->func_type.ret_type)
+                || x->func_type.num_params != y->func_type.num_params) {
             return false;
         }
-        for (size_t i = 0; i < x.func_type.num_params; i++) {
-            if (!expr_equal(x.func_type.param_types[i],
-                        y.func_type.param_types[i])
-                    || x.func_type.param_names[i]
-                        != y.func_type.param_names[i]) {
+        for (size_t i = 0; i < x->func_type.num_params; i++) {
+            if (!expr_equal(&x->func_type.param_types[i],
+                        &y->func_type.param_types[i])
+                    || x->func_type.param_names[i]
+                        != y->func_type.param_names[i]) {
                 return false;
             }
         }
         return true;
 
       case EXPR_CALL:
-        if (!expr_equal(*x.call.func, *y.call.func)
-                || x.call.num_args != y.call.num_args) {
+        if (!expr_equal(x->call.func, y->call.func)
+                || x->call.num_args != y->call.num_args) {
             return false;
         }
-        for (size_t i = 0; i < x.call.num_args; i++) {
-            if (!expr_equal(x.call.args[i], y.call.args[i])) {
+        for (size_t i = 0; i < x->call.num_args; i++) {
+            if (!expr_equal(&x->call.args[i], &y->call.args[i])) {
                 return false;
             }
         }
         return true;
 
       case EXPR_STRUCT:
-        if (x.struct_.num_fields != y.struct_.num_fields) {
+        if (x->struct_.num_fields != y->struct_.num_fields) {
             return false;
         }
-        for (size_t i = 0; i < x.struct_.num_fields; i++) {
-            if (!expr_equal(x.struct_.field_types[i],
-                        y.struct_.field_types[i])
-                    || x.struct_.field_names[i]
-                        != y.struct_.field_names[i]) {
+        for (size_t i = 0; i < x->struct_.num_fields; i++) {
+            if (!expr_equal(&x->struct_.field_types[i],
+                        &y->struct_.field_types[i])
+                    || x->struct_.field_names[i]
+                        != y->struct_.field_names[i]) {
                 return false;
             }
         }
         return true;
 
       case EXPR_UNION:
-        if (x.union_.num_fields != y.union_.num_fields) {
+        if (x->union_.num_fields != y->union_.num_fields) {
             return false;
         }
-        for (size_t i = 0; i < x.union_.num_fields; i++) {
-            if (!expr_equal(x.union_.field_types[i],
-                        y.union_.field_types[i])
-                    || x.union_.field_names[i]
-                        != y.union_.field_names[i]) {
+        for (size_t i = 0; i < x->union_.num_fields; i++) {
+            if (!expr_equal(&x->union_.field_types[i],
+                        &y->union_.field_types[i])
+                    || x->union_.field_names[i]
+                        != y->union_.field_names[i]) {
                 return false;
             }
         }
         return true;
 
       case EXPR_PACK:
-        if (!expr_equal(*x.pack.type, *y.pack.type)
-                || x.pack.num_assigns != y.pack.num_assigns) {
+        if (!expr_equal(x->pack.type, y->pack.type)
+                || x->pack.num_assigns != y->pack.num_assigns) {
             return false;
         }
-        for (size_t i = 0; i < x.pack.num_assigns; i++) {
-            if (x.pack.field_names[i] != y.pack.field_names[i]
-                    || !expr_equal(x.pack.assigns[i],
-                        y.pack.assigns[i])) {
+        for (size_t i = 0; i < x->pack.num_assigns; i++) {
+            if (x->pack.field_names[i] != y->pack.field_names[i]
+                    || !expr_equal(&x->pack.assigns[i], &y->pack.assigns[i])) {
                 return false;
             }
         }
         return true;
 
       case EXPR_MEMBER:
-        if (!expr_equal(*x.member.record, *y.member.record)
-                || x.member.field != y.member.field) {
+        if (!expr_equal(x->member.record, y->member.record)
+                || x->member.field != y->member.field) {
             return false;
         }
         return true;
 
       case EXPR_POINTER:
-        return expr_equal(*x.pointer, *y.pointer);
+        return expr_equal(x->pointer, y->pointer);
 
       case EXPR_REFERENCE:
-        return expr_equal(*x.reference, *y.reference);
+        return expr_equal(x->reference, y->reference);
 
       case EXPR_DEREFERENCE:
-        return expr_equal(*x.dereference, *y.dereference);
+        return expr_equal(x->dereference, y->dereference);
     }
 }
 
-static Literal literal_copy(Literal x) {
-    switch (x.tag) {
+static Literal literal_copy(const Literal *x) {
+    switch (x->tag) {
       case LIT_TYPE:
       case LIT_VOID:
-      case LIT_U8:
-      case LIT_S8:
-      case LIT_U16:
-      case LIT_S16:
-      case LIT_U32:
-      case LIT_S32:
-      case LIT_U64:
-      case LIT_S64:
+      case LIT_U8:      case LIT_S8:
+      case LIT_U16:     case LIT_S16:
+      case LIT_U32:     case LIT_S32:
+      case LIT_U64:     case LIT_S64:
       case LIT_BOOL:
       case LIT_INTEGRAL:
       case LIT_BOOLEAN:
-        return x;
+        return *x;
     }
 }
 
-Expr expr_copy(Expr x) {
-    Expr y = {.location = x.location, .tag = x.tag};
+Expr expr_copy(const Expr *x) {
+    Expr y = {.location = x->location, .tag = x->tag};
 
-    switch (x.tag) {
+    switch (x->tag) {
       case EXPR_LITERAL:
-        y.literal = literal_copy(x.literal);
+        y.literal = literal_copy(&x->literal);
         break;
 
       case EXPR_IDENT:
-        y.ident = x.ident;
+        y.ident = x->ident;
         break;
 
       case EXPR_BIN_OP:
-        y.bin_op.op = x.bin_op.op;
+        y.bin_op.op = x->bin_op.op;
         alloc(y.bin_op.expr1);
-        *y.bin_op.expr1 = expr_copy(*x.bin_op.expr1);
+        *y.bin_op.expr1 = expr_copy(x->bin_op.expr1);
         alloc(y.bin_op.expr2);
-        *y.bin_op.expr2 = expr_copy(*x.bin_op.expr2);
+        *y.bin_op.expr2 = expr_copy(x->bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:
         alloc(y.func_type.ret_type);
-        *y.func_type.ret_type = expr_copy(*x.func_type.ret_type);
-        y.func_type.num_params = x.func_type.num_params;
+        *y.func_type.ret_type = expr_copy(x->func_type.ret_type);
+        y.func_type.num_params = x->func_type.num_params;
         alloc_array(y.func_type.param_types, y.func_type.num_params);
         alloc_array(y.func_type.param_names, y.func_type.num_params);
         for (size_t i = 0; i < y.func_type.num_params; i++) {
-            y.func_type.param_types[i] = expr_copy(x.func_type.param_types[i]);
-            y.func_type.param_names[i] = x.func_type.param_names[i];
+            y.func_type.param_types[i] = expr_copy(&x->func_type.param_types[i]);
+            y.func_type.param_names[i] = x->func_type.param_names[i];
         }
         break;
 
       case EXPR_CALL:
         alloc(y.call.func);
-        *y.call.func = expr_copy(*x.call.func);
-        y.call.num_args = x.call.num_args;
+        *y.call.func = expr_copy(x->call.func);
+        y.call.num_args = x->call.num_args;
         alloc_array(y.call.args, y.call.num_args);
         for (size_t i = 0; i < y.call.num_args; i++) {
-            y.call.args[i] = expr_copy(x.call.args[i]);
+            y.call.args[i] = expr_copy(&x->call.args[i]);
         }
         break;
 
       case EXPR_STRUCT:
-        y.struct_.num_fields = x.struct_.num_fields;
+        y.struct_.num_fields = x->struct_.num_fields;
         alloc_array(y.struct_.field_types, y.struct_.num_fields);
         alloc_array(y.struct_.field_names, y.struct_.num_fields);
         for (size_t i = 0; i < y.struct_.num_fields; i++) {
-            y.struct_.field_types[i] = expr_copy(x.struct_.field_types[i]);
-            y.struct_.field_names[i] = x.struct_.field_names[i];
+            y.struct_.field_types[i] = expr_copy(&x->struct_.field_types[i]);
+            y.struct_.field_names[i] = x->struct_.field_names[i];
         }
         break;
 
       case EXPR_UNION:
-        y.union_.num_fields = x.union_.num_fields;
+        y.union_.num_fields = x->union_.num_fields;
         alloc_array(y.union_.field_types, y.union_.num_fields);
         alloc_array(y.union_.field_names, y.union_.num_fields);
         for (size_t i = 0; i < y.union_.num_fields; i++) {
-            y.union_.field_types[i] = expr_copy(x.union_.field_types[i]);
-            y.union_.field_names[i] = x.union_.field_names[i];
+            y.union_.field_types[i] = expr_copy(&x->union_.field_types[i]);
+            y.union_.field_names[i] = x->union_.field_names[i];
         }
         break;
 
       case EXPR_PACK:
         alloc(y.pack.type);
-        *y.pack.type = expr_copy(*x.pack.type);
-        y.pack.num_assigns = x.pack.num_assigns;
+        *y.pack.type = expr_copy(x->pack.type);
+        y.pack.num_assigns = x->pack.num_assigns;
         alloc_array(y.pack.field_names, y.pack.num_assigns);
         alloc_array(y.pack.assigns, y.pack.num_assigns);
         for (size_t i = 0; i < y.pack.num_assigns; i++) {
-            y.pack.field_names[i] = x.pack.field_names[i];
-            y.pack.assigns[i] = expr_copy(x.pack.assigns[i]);
+            y.pack.field_names[i] = x->pack.field_names[i];
+            y.pack.assigns[i] = expr_copy(&x->pack.assigns[i]);
         }
         break;
 
       case EXPR_MEMBER:
         alloc(y.member.record);
-        *y.member.record = expr_copy(*x.member.record);
-        y.member.field = x.member.field;
+        *y.member.record = expr_copy(x->member.record);
+        y.member.field = x->member.field;
         break;
 
       case EXPR_POINTER:
         alloc(y.pointer);
-        *y.pointer = expr_copy(*x.pointer);
+        *y.pointer = expr_copy(x->pointer);
         break;
 
       case EXPR_REFERENCE:
         alloc(y.reference);
-        *y.reference = expr_copy(*x.reference);
+        *y.reference = expr_copy(x->reference);
         break;
 
       case EXPR_DEREFERENCE:
         alloc(y.dereference);
-        *y.dereference = expr_copy(*x.dereference);
+        *y.dereference = expr_copy(x->dereference);
         break;
     }
 
     return y;
 }
 
-void expr_free_vars(Expr expr, SymbolSet *free_vars) {
+void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
     SymbolSet free_vars_temp[1];
 
-    switch (expr.tag) {
+    switch (expr->tag) {
       case EXPR_LITERAL:
         *free_vars = symbol_set_empty();
         break;
 
       case EXPR_IDENT:
         *free_vars = symbol_set_empty();
-        symbol_set_add(free_vars, expr.ident);
+        symbol_set_add(free_vars, expr->ident);
         break;
 
       case EXPR_BIN_OP:
-        expr_free_vars(*expr.bin_op.expr1, free_vars);
-        expr_free_vars(*expr.bin_op.expr2, free_vars_temp);
+        expr_free_vars(expr->bin_op.expr1, free_vars);
+        expr_free_vars(expr->bin_op.expr2, free_vars_temp);
         symbol_set_union(free_vars, free_vars_temp);
         break;
 
       case EXPR_FUNC_TYPE:
-        expr_free_vars(*expr.func_type.ret_type, free_vars);
-        for (size_t i = 0; i < expr.func_type.num_params; i++) {
-            if (expr.func_type.param_names[i] != NULL) {
-                symbol_set_delete(free_vars, expr.func_type.param_names[i]);
+        expr_free_vars(expr->func_type.ret_type, free_vars);
+        for (size_t i = 0; i < expr->func_type.num_params; i++) {
+            if (expr->func_type.param_names[i] != NULL) {
+                symbol_set_delete(free_vars, expr->func_type.param_names[i]);
             }
         }
-        for (size_t i = 0; i < expr.func_type.num_params; i++) {
-            expr_free_vars(expr.func_type.param_types[i], free_vars_temp);
+        for (size_t i = 0; i < expr->func_type.num_params; i++) {
+            expr_free_vars(&expr->func_type.param_types[i], free_vars_temp);
             for (size_t j = 0; j < i; j++) {
-                if (expr.func_type.param_names[j] != NULL) {
+                if (expr->func_type.param_names[j] != NULL) {
                     symbol_set_delete(free_vars_temp,
-                        expr.func_type.param_names[j]);
+                        expr->func_type.param_names[j]);
                 }
             }
             symbol_set_union(free_vars, free_vars_temp);
@@ -298,19 +293,19 @@ void expr_free_vars(Expr expr, SymbolSet *free_vars) {
         break;
 
       case EXPR_CALL:
-        expr_free_vars(*expr.call.func, free_vars);
-        for (size_t i = 0; i < expr.call.num_args; i++) {
-            expr_free_vars(expr.call.args[i], free_vars_temp);
+        expr_free_vars(expr->call.func, free_vars);
+        for (size_t i = 0; i < expr->call.num_args; i++) {
+            expr_free_vars(&expr->call.args[i], free_vars_temp);
             symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_STRUCT:
         *free_vars = symbol_set_empty();
-        for (size_t i = 0; i < expr.struct_.num_fields; i++) {
-            expr_free_vars(expr.struct_.field_types[i], free_vars_temp);
+        for (size_t i = 0; i < expr->struct_.num_fields; i++) {
+            expr_free_vars(&expr->struct_.field_types[i], free_vars_temp);
             for (size_t j = 0; j < i; j++) {
-                symbol_set_delete(free_vars_temp, expr.struct_.field_names[j]);
+                symbol_set_delete(free_vars_temp, expr->struct_.field_names[j]);
             }
             symbol_set_union(free_vars, free_vars_temp);
         }
@@ -318,40 +313,40 @@ void expr_free_vars(Expr expr, SymbolSet *free_vars) {
 
       case EXPR_UNION:
         *free_vars = symbol_set_empty();
-        for (size_t i = 0; i < expr.union_.num_fields; i++) {
-            expr_free_vars(expr.union_.field_types[i], free_vars_temp);
+        for (size_t i = 0; i < expr->union_.num_fields; i++) {
+            expr_free_vars(&expr->union_.field_types[i], free_vars_temp);
             symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_PACK:
-        expr_free_vars(*expr.pack.type, free_vars);
-        for (size_t i = 0; i < expr.pack.num_assigns; i++) {
-            expr_free_vars(expr.pack.assigns[i], free_vars_temp);
+        expr_free_vars(expr->pack.type, free_vars);
+        for (size_t i = 0; i < expr->pack.num_assigns; i++) {
+            expr_free_vars(&expr->pack.assigns[i], free_vars_temp);
             symbol_set_union(free_vars, free_vars_temp);
         }
         break;
 
       case EXPR_MEMBER:
-        expr_free_vars(*expr.member.record, free_vars);
+        expr_free_vars(expr->member.record, free_vars);
         break;
 
       case EXPR_POINTER:
-        expr_free_vars(*expr.pointer, free_vars);
+        expr_free_vars(expr->pointer, free_vars);
         break;
 
       case EXPR_REFERENCE:
-        expr_free_vars(*expr.reference, free_vars);
+        expr_free_vars(expr->reference, free_vars);
         break;
 
       case EXPR_DEREFERENCE:
-        expr_free_vars(*expr.dereference, free_vars);
+        expr_free_vars(expr->dereference, free_vars);
         break;
     }
 }
 
-static bool expr_func_type_subst(Context *context, Expr *expr, const char *name,
-        Expr replacement) {
+static bool expr_func_type_subst(Context *context, Expr *expr,
+        const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_FUNC_TYPE);
     bool ret_val = false;
 
@@ -383,12 +378,12 @@ static bool expr_func_type_subst(Context *context, Expr *expr, const char *name,
                 for (size_t j = i + 1; j < expr->func_type.num_params; j++) {
                     if (!expr_subst(context,
                             &expr->func_type.param_types[i],
-                            old_param_name, new_replacement)) {
+                            old_param_name, &new_replacement)) {
                         goto end_of_function;
                     }
                 }
                 if (!expr_subst(context, expr->func_type.ret_type,
-                        old_param_name, new_replacement)) {
+                        old_param_name, &new_replacement)) {
                     goto end_of_function;
                 }
             }
@@ -405,8 +400,8 @@ end_of_function:
     return ret_val;
 }
 
-static bool expr_struct_subst(Context *context, Expr *expr, const char *name,
-        Expr replacement) {
+static bool expr_struct_subst(Context *context, Expr *expr,
+        const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_STRUCT);
     bool ret_val = false;
 
@@ -448,8 +443,8 @@ end_of_function:
 // algorithm, which coincides with the union one when only one field is being
 // assigned. When type checking we should ensure that this in indeed the case
 // by making sure union packings have exactly one assignment.
-static bool expr_pack_subst(Context *context, Expr *expr, const char *name,
-        Expr replacement) {
+static bool expr_pack_subst(Context *context, Expr *expr,
+        const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_PACK);
     bool ret_val = false;
 
@@ -480,7 +475,7 @@ end_of_function:
 }
 
 bool expr_subst(Context *context, Expr *expr,
-        const char *name, Expr replacement) {
+        const char *name, const Expr *replacement) {
     switch (expr->tag) {
       case EXPR_LITERAL:
         return true;
@@ -692,8 +687,8 @@ static void print_indentation_whitespace(FILE *to, int nesting) {
 }
 
 #define tag_to_string(tag, str) case tag: fprintf(to, str); break;
-static void literal_pprint(FILE *to, Literal literal) {
-    switch (literal.tag) {
+static void literal_pprint(FILE *to, const Literal *literal) {
+    switch (literal->tag) {
       tag_to_string(LIT_TYPE, "type")
       tag_to_string(LIT_VOID, "void")
       tag_to_string(LIT_U8, "u8")
@@ -707,11 +702,11 @@ static void literal_pprint(FILE *to, Literal literal) {
       tag_to_string(LIT_BOOL, "bool")
 
       case LIT_INTEGRAL:
-        fprintf(to, "%" PRIu64, literal.integral);
+        fprintf(to, "%" PRIu64, literal->integral);
         break;
 
       case LIT_BOOLEAN:
-        fprintf(to, literal.boolean ? "true" : "false");
+        fprintf(to, literal->boolean ? "true" : "false");
         break;
     }
 }
@@ -730,125 +725,125 @@ static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
 }
 #undef tag_to_string
 
-static void expr_pprint_(FILE *to, Expr expr) {
-    bool simple = expr.tag == EXPR_LITERAL || expr.tag == EXPR_IDENT
-            || expr.tag == EXPR_STRUCT || expr.tag == EXPR_UNION;
+static void expr_pprint_(FILE *to, const Expr *expr) {
+    bool simple = expr->tag == EXPR_LITERAL || expr->tag == EXPR_IDENT
+            || expr->tag == EXPR_STRUCT || expr->tag == EXPR_UNION;
 
     if (!simple) putc('(', to);
     expr_pprint(to, expr);
     if (!simple) putc(')', to);
 }
 
-void expr_pprint(FILE *to, Expr expr) {
-    switch (expr.tag) {
+void expr_pprint(FILE *to, const Expr *expr) {
+    switch (expr->tag) {
       case EXPR_LITERAL:
-        literal_pprint(to, expr.literal);
+        literal_pprint(to, &expr->literal);
         break;
 
       case EXPR_IDENT:
-        fputs(expr.ident, to);
+        fputs(expr->ident, to);
         break;
 
       case EXPR_BIN_OP:
-        expr_pprint_(to, *expr.bin_op.expr1);
-        bin_op_pprint(to, expr.bin_op.op);
-        expr_pprint_(to, *expr.bin_op.expr2);
+        expr_pprint_(to, expr->bin_op.expr1);
+        bin_op_pprint(to, expr->bin_op.op);
+        expr_pprint_(to, expr->bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:
-        expr_pprint_(to, *expr.func_type.ret_type);
+        expr_pprint_(to, expr->func_type.ret_type);
         putc('[', to);
-        for (size_t i = 0; i < expr.func_type.num_params; i++) {
+        for (size_t i = 0; i < expr->func_type.num_params; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, expr.func_type.param_types[i]);
-            if (expr.func_type.param_names[i] != NULL) {
-                fprintf(to, " %s", expr.func_type.param_names[i]);
+            expr_pprint(to, &expr->func_type.param_types[i]);
+            if (expr->func_type.param_names[i] != NULL) {
+                fprintf(to, " %s", expr->func_type.param_names[i]);
             }
         }
         putc(']', to);
         break;
 
       case EXPR_CALL:
-        expr_pprint_(to, *expr.call.func);
+        expr_pprint_(to, expr->call.func);
         putc('(', to);
-        for (size_t i = 0; i < expr.call.num_args; i++) {
+        for (size_t i = 0; i < expr->call.num_args; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, expr.call.args[i]);
+            expr_pprint(to, &expr->call.args[i]);
         }
         putc(')', to);
         break;
 
       case EXPR_STRUCT:
         fprintf(to, "struct { ");
-        for (size_t i = 0; i < expr.struct_.num_fields; i++) {
-            expr_pprint(to, expr.struct_.field_types[i]);
-            fprintf(to, " %s; ", expr.struct_.field_names[i]);
+        for (size_t i = 0; i < expr->struct_.num_fields; i++) {
+            expr_pprint(to, &expr->struct_.field_types[i]);
+            fprintf(to, " %s; ", expr->struct_.field_names[i]);
         }
         putc('}', to);
         break;
 
       case EXPR_UNION:
         fprintf(to, "union { ");
-        for (size_t i = 0; i < expr.union_.num_fields; i++) {
-            expr_pprint(to, expr.union_.field_types[i]);
-            fprintf(to, " %s; ", expr.union_.field_names[i]);
+        for (size_t i = 0; i < expr->union_.num_fields; i++) {
+            expr_pprint(to, &expr->union_.field_types[i]);
+            fprintf(to, " %s; ", expr->union_.field_names[i]);
         }
         putc('}', to);
         break;
 
       case EXPR_PACK:
         putc('(', to);
-        expr_pprint_(to, *expr.pack.type);
+        expr_pprint_(to, expr->pack.type);
         fprintf(to, "){");
-        for (size_t i = 0; i < expr.pack.num_assigns; i++) {
+        for (size_t i = 0; i < expr->pack.num_assigns; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            fprintf(to, ".%s = ", expr.pack.field_names[i]);
-            expr_pprint(to, expr.pack.assigns[i]);
+            fprintf(to, ".%s = ", expr->pack.field_names[i]);
+            expr_pprint(to, &expr->pack.assigns[i]);
         }
         putc('}', to);
         break;
 
       case EXPR_MEMBER:
-        expr_pprint_(to, *expr.member.record);
-        fprintf(to, ".%s", expr.member.field);
+        expr_pprint_(to, expr->member.record);
+        fprintf(to, ".%s", expr->member.field);
         break;
 
       case EXPR_POINTER:
-        expr_pprint_(to, *expr.pointer);
+        expr_pprint_(to, expr->pointer);
         putc('*', to);
         break;
 
       case EXPR_REFERENCE:
         putc('&', to);
-        expr_pprint_(to, *expr.reference);
+        expr_pprint_(to, expr->reference);
         break;
 
       case EXPR_DEREFERENCE:
         putc('*', to);
-        expr_pprint_(to, *expr.dereference);
+        expr_pprint_(to, expr->dereference);
         break;
     }
 }
 
-static void block_pprint(FILE *to, int nesting, Block block) {
-    for (size_t i = 0; i < block.num_statements; i++) {
-        statement_pprint(to, nesting, block.statements[i]);
+static void block_pprint(FILE *to, int nesting, const Block *block) {
+    for (size_t i = 0; i < block->num_statements; i++) {
+        statement_pprint(to, nesting, &block->statements[i]);
     }
 }
 
-void statement_pprint(FILE *to, int nesting, Statement statement) {
+void statement_pprint(FILE *to, int nesting, const Statement *statement) {
     print_indentation_whitespace(to, nesting);
 
-    switch (statement.tag) {
+    switch (statement->tag) {
       case STATEMENT_EMPTY:
         fprintf(to, ";\n");
         break;
@@ -858,78 +853,76 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
         // Fallthrough
 
       case STATEMENT_EXPR:
-        expr_pprint(to, statement.expr);
+        expr_pprint(to, &statement->expr);
         fprintf(to, ";\n");
         break;
 
       case STATEMENT_BLOCK:
         fprintf(to, "{\n");
-        for (size_t i = 0; i < statement.block.num_statements; i++) {
-            statement_pprint(to, nesting + 1, statement.block.statements[i]);
-        }
+        block_pprint(to, nesting + 1, &statement->block);
         print_indentation_whitespace(to, nesting);
         fprintf(to, "}\n");
         break;
 
       case STATEMENT_DECL:
-        expr_pprint(to, statement.decl.type);
-        fprintf(to, " %s", statement.decl.name);
-        if (statement.decl.is_initialized) {
+        expr_pprint(to, &statement->decl.type);
+        fprintf(to, " %s", statement->decl.name);
+        if (statement->decl.is_initialized) {
             fprintf(to, " = ");
-            expr_pprint(to, statement.decl.initial_value);
+            expr_pprint(to, &statement->decl.initial_value);
         }
         fprintf(to, ";\n");
         break;
 
       case STATEMENT_IFTHENELSE:
-        for (size_t i = 0; i < statement.ifthenelse.num_ifs; i++) {
+        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
             if (i != 0) {
                 print_indentation_whitespace(to, nesting);
                 fprintf(to, "} else ");
             }
             fprintf(to, "if (");
-            expr_pprint(to, statement.ifthenelse.ifs[i]);
+            expr_pprint(to, &statement->ifthenelse.ifs[i]);
             fprintf(to, ") {\n");
-            block_pprint(to, nesting + 1, statement.ifthenelse.thens[i]);
+            block_pprint(to, nesting + 1, &statement->ifthenelse.thens[i]);
         }
         print_indentation_whitespace(to, nesting);
         fprintf(to, "} else {\n");
-        block_pprint(to, nesting + 1, statement.ifthenelse.else_);
+        block_pprint(to, nesting + 1, &statement->ifthenelse.else_);
         print_indentation_whitespace(to, nesting);
         fprintf(to, "}\n");
         break;
     }
 }
 
-void top_level_pprint(FILE *to, TopLevel top_level) {
-    switch (top_level.tag) {
+void top_level_pprint(FILE *to, const TopLevel *top_level) {
+    switch (top_level->tag) {
        case TOP_LEVEL_FUNC:
-        expr_pprint(to, top_level.func.ret_type);
-        fprintf(to, " %s(", top_level.name);
+        expr_pprint(to, &top_level->func.ret_type);
+        fprintf(to, " %s(", top_level->name);
 
-        for (size_t i = 0; i < top_level.func.num_params; i++) {
+        for (size_t i = 0; i < top_level->func.num_params; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, top_level.func.param_types[i]);
-            if (top_level.func.param_names[i] != NULL) {
-                fprintf(to, " %s", top_level.func.param_names[i]);
+            expr_pprint(to, &top_level->func.param_types[i]);
+            if (top_level->func.param_names[i] != NULL) {
+                fprintf(to, " %s", top_level->func.param_names[i]);
             }
         }
         fprintf(to, ") {\n");
-        block_pprint(to, 1, top_level.func.block);
+        block_pprint(to, 1, &top_level->func.block);
         fprintf(to, "}\n");
         break;
     }
 }
 
-void translation_unit_pprint(FILE *to, TranslationUnit unit) {
-    for (size_t i = 0; i < unit.num_top_levels; i++) {
+void translation_unit_pprint(FILE *to, const TranslationUnit *unit) {
+    for (size_t i = 0; i < unit->num_top_levels; i++) {
         if (i > 0) {
             putc('\n', to);
         }
 
-        top_level_pprint(to, unit.top_levels[i]);
+        top_level_pprint(to, &unit->top_levels[i]);
     }
 }

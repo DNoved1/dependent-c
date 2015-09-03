@@ -257,7 +257,7 @@ void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
         }
 
         fprintf(to, " => ");
-        expr_pprint(to, symbols->global_types[i]);
+        expr_pprint(to, &symbols->global_types[i]);
         fprintf(to, "\n");
     }
 
@@ -285,7 +285,7 @@ void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
             }
 
             fprintf(to, " => ");
-            expr_pprint(to, symbols->locals_stack[i].local_types[j]);
+            expr_pprint(to, &symbols->locals_stack[i].local_types[j]);
             fprintf(to, "\n");
         }
     }

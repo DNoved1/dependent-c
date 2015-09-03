@@ -6,7 +6,7 @@ type Array(type T, u64 n) {
     }
 }
 
-type lift_bool(bool b) {
+type lift_bool(bool b, u64 foo) {
     if (b) {
         return struct {};
     } else {
@@ -14,7 +14,7 @@ type lift_bool(bool b) {
     }
 }
 
-T get(type T, u64 n, u64 i, lift_bool(i < n) proof, Array(T, n) array) {
+T get(type T, u64 n, u64 i, lift_bool(i < n, 0) proof, Array(T, n) array) {
     if (i == 0) {
         return array.fst;
     } else {

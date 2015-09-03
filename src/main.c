@@ -14,11 +14,11 @@ int main(void) {
 
     if (yyparse(&context) == 0) {
         printf("Parsed as:\n");
-        translation_unit_pprint(stdout, context.ast);
+        translation_unit_pprint(stdout, &context.ast);
         putchar('\n');
 
         for (size_t i = 0; i < context.ast.num_top_levels; i++) {
-            if (!type_check_top_level(&context, context.ast.top_levels[i])) {
+            if (!type_check_top_level(&context, &context.ast.top_levels[i])) {
                 fprintf(stderr, "Failed to type check \"%s\".\n",
                     context.ast.top_levels[i].name);
                 ret_value = EXIT_FAILURE;

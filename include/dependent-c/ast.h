@@ -125,7 +125,6 @@ struct Expr {
     };
 };
 
-/* Since this will be used fairly often we'll just go ahead and define it here.*/
 #define literal_expr_type \
     ((Expr){ \
           .tag = EXPR_LITERAL \
@@ -137,6 +136,24 @@ struct Expr {
           .tag = EXPR_LITERAL \
         , .literal = (Literal){.tag = LIT_BOOL} \
     })
+
+void expr_free(Expr *expr);
+void expr_pprint(FILE *to, const Expr *expr);
+
+/* Determine if two expressions are exactly equivalent. Does not take into
+ * account alpha equivalence.
+ */
+bool expr_equal(const Expr *x, const Expr *y);
+
+/* Make a deep copy of an expression. */
+Expr expr_copy(const Expr *x);
+
+// Cyclical include problems...
+#include "dependent-c/symbol_table.h"
+
+/* Calculate the set of free variables in an expression. */
+void expr_free_vars(const Expr *expr, SymbolSet *set);
+
 
 /***** Statements ************************************************************/
 typedef enum {
@@ -180,6 +197,11 @@ struct Statement {
     };
 };
 
+void statement_free(Statement *statement);
+void statement_pprint(FILE *to, int nesting, const Statement *statement);
+
+void block_free(Block *block);
+
 /***** Top-Level Definitions *************************************************/
 typedef enum {
       TOP_LEVEL_FUNC
@@ -201,48 +223,27 @@ typedef struct {
     };
 } TopLevel;
 
+
+void top_level_free(TopLevel *top_level);
+void top_level_pprint(FILE *to, const TopLevel *top_level);
+
+/***** Translation Units *****************************************************/
+
 typedef struct {
     size_t num_top_levels;
     TopLevel *top_levels;
 } TranslationUnit;
 
-/* Free any resources associated with an expression. */
-void expr_free(Expr *expr);
-void expr_pprint(FILE *to, Expr expr);
+void translation_unit_free(TranslationUnit *unit);
+void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
 
-/* Determine if two expressions are exactly equivalent. Does not take into
- * account alpha equivalence.
- */
-bool expr_equal(Expr x, Expr y);
 
-/* Make a deep copy of an expression. */
-Expr expr_copy(Expr x);
-
-// Cyclical include problems...
-#include "dependent-c/symbol_table.h"
-
-/* Calculate the set of free variables in an expression. */
-void expr_free_vars(Expr expr, SymbolSet *set);
 
 // Cyclical include problems... again
 #include "dependent-c/general.h"
 
 /* Substitute a variable in an expression for an expression. */
 bool expr_subst(Context *context, Expr *expr,
-    const char *name, Expr replacement);
-
-/* Free any resources associated with an expression. */
-void statement_free(Statement *statement);
-void statement_pprint(FILE *to, int nesting, Statement statement);
-
-void block_free(Block *block);
-
-/* Free any resources associated with a top level definition. */
-void top_level_free(TopLevel *top_level);
-void top_level_pprint(FILE *to, TopLevel top_level);
-
-/* Free any resources associated with a translation unit. */
-void translation_unit_free(TranslationUnit *unit);
-void translation_unit_pprint(FILE *to, TranslationUnit unit);
+    const char *name, const Expr *replacement);
 
 #endif /* DEPENDENT_C_AST */
