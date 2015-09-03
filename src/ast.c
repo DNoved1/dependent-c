@@ -718,22 +718,25 @@ static void literal_pprint(FILE *to, int nesting, Literal literal) {
 
 static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
     switch (bin_op) {
-      tag_to_string(BIN_OP_EQ, "==")
-      tag_to_string(BIN_OP_NE, "!=")
-      tag_to_string(BIN_OP_LT, "<")
-      tag_to_string(BIN_OP_LTE, "<=")
-      tag_to_string(BIN_OP_GT, ">")
-      tag_to_string(BIN_OP_GTE, ">=")
-      tag_to_string(BIN_OP_ADD, "+")
-      tag_to_string(BIN_OP_SUB, "-")
+      tag_to_string(BIN_OP_EQ,      " == ")
+      tag_to_string(BIN_OP_NE,      " != ")
+      tag_to_string(BIN_OP_LT,      " < ")
+      tag_to_string(BIN_OP_LTE,     " <= ")
+      tag_to_string(BIN_OP_GT,      " > ")
+      tag_to_string(BIN_OP_GTE,     " >= ")
+      tag_to_string(BIN_OP_ADD,     " + ")
+      tag_to_string(BIN_OP_SUB,     " - ")
     }
 }
 #undef tag_to_string
 
 static void expr_pprint_(FILE *to, int nesting, Expr expr) {
-    putc('(', to);
+    bool simple = expr.tag == EXPR_LITERAL || expr.tag == EXPR_IDENT
+            || expr.tag == EXPR_STRUCT || expr.tag == EXPR_UNION;
+
+    if (!simple) putc('(', to);
     expr_pprint(to, nesting, expr);
-    putc(')', to);
+    if (!simple) putc(')', to);
 }
 
 void expr_pprint(FILE *to, int nesting, Expr expr) {
@@ -800,8 +803,9 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
         break;
 
       case EXPR_PACK:
+        putc('(', to);
         expr_pprint_(to, nesting, *expr.pack.type);
-        putc('{', to);
+        fprintf(to, "){");
         for (size_t i = 0; i < expr.pack.num_assigns; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
