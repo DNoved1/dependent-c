@@ -117,4 +117,6 @@ TokenStream token_stream_new(CharStream source) {
 
 void token_stream_free(TokenStream *stream) {
     stream->source.free(stream->source.self_data);
+    dealloc(stream->source.peeked);
+    memset(stream, 0, sizeof *stream);
 }

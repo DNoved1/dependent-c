@@ -546,7 +546,9 @@ void expr_free(Expr *expr) {
 
       case EXPR_BIN_OP:
         expr_free(expr->bin_op.expr1);
+        dealloc(expr->bin_op.expr1);
         expr_free(expr->bin_op.expr2);
+        dealloc(expr->bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:

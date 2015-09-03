@@ -578,6 +578,7 @@ start_of_function:;
         check_is_reserved(else,     TOK_ELSE)
         else {
             const char *interned_ident = symbol_intern(&context->interns, ident);
+            dealloc(ident);
             lval->ident = interned_ident;
             return TOK_IDENT;
         }
