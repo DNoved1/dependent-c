@@ -692,7 +692,7 @@ static void print_indentation_whitespace(FILE *to, int nesting) {
 }
 
 #define tag_to_string(tag, str) case tag: fprintf(to, str); break;
-static void literal_pprint(FILE *to, int nesting, Literal literal) {
+static void literal_pprint(FILE *to, Literal literal) {
     switch (literal.tag) {
       tag_to_string(LIT_TYPE, "type")
       tag_to_string(LIT_VOID, "void")
@@ -730,19 +730,19 @@ static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
 }
 #undef tag_to_string
 
-static void expr_pprint_(FILE *to, int nesting, Expr expr) {
+static void expr_pprint_(FILE *to, Expr expr) {
     bool simple = expr.tag == EXPR_LITERAL || expr.tag == EXPR_IDENT
             || expr.tag == EXPR_STRUCT || expr.tag == EXPR_UNION;
 
     if (!simple) putc('(', to);
-    expr_pprint(to, nesting, expr);
+    expr_pprint(to, expr);
     if (!simple) putc(')', to);
 }
 
-void expr_pprint(FILE *to, int nesting, Expr expr) {
+void expr_pprint(FILE *to, Expr expr) {
     switch (expr.tag) {
       case EXPR_LITERAL:
-        literal_pprint(to, nesting, expr.literal);
+        literal_pprint(to, expr.literal);
         break;
 
       case EXPR_IDENT:
@@ -750,20 +750,20 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
         break;
 
       case EXPR_BIN_OP:
-        expr_pprint_(to, nesting, *expr.bin_op.expr1);
+        expr_pprint_(to, *expr.bin_op.expr1);
         bin_op_pprint(to, expr.bin_op.op);
-        expr_pprint_(to, nesting, *expr.bin_op.expr2);
+        expr_pprint_(to, *expr.bin_op.expr2);
         break;
 
       case EXPR_FUNC_TYPE:
-        expr_pprint_(to, nesting, *expr.func_type.ret_type);
+        expr_pprint_(to, *expr.func_type.ret_type);
         putc('[', to);
         for (size_t i = 0; i < expr.func_type.num_params; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, nesting, expr.func_type.param_types[i]);
+            expr_pprint(to, expr.func_type.param_types[i]);
             if (expr.func_type.param_names[i] != NULL) {
                 fprintf(to, " %s", expr.func_type.param_names[i]);
             }
@@ -772,14 +772,14 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
         break;
 
       case EXPR_CALL:
-        expr_pprint_(to, nesting, *expr.call.func);
+        expr_pprint_(to, *expr.call.func);
         putc('(', to);
         for (size_t i = 0; i < expr.call.num_args; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, nesting, expr.call.args[i]);
+            expr_pprint(to, expr.call.args[i]);
         }
         putc(')', to);
         break;
@@ -787,7 +787,7 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
       case EXPR_STRUCT:
         fprintf(to, "struct { ");
         for (size_t i = 0; i < expr.struct_.num_fields; i++) {
-            expr_pprint(to, nesting, expr.struct_.field_types[i]);
+            expr_pprint(to, expr.struct_.field_types[i]);
             fprintf(to, " %s; ", expr.struct_.field_names[i]);
         }
         putc('}', to);
@@ -796,7 +796,7 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
       case EXPR_UNION:
         fprintf(to, "union { ");
         for (size_t i = 0; i < expr.union_.num_fields; i++) {
-            expr_pprint(to, nesting, expr.union_.field_types[i]);
+            expr_pprint(to, expr.union_.field_types[i]);
             fprintf(to, " %s; ", expr.union_.field_names[i]);
         }
         putc('}', to);
@@ -804,7 +804,7 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
 
       case EXPR_PACK:
         putc('(', to);
-        expr_pprint_(to, nesting, *expr.pack.type);
+        expr_pprint_(to, *expr.pack.type);
         fprintf(to, "){");
         for (size_t i = 0; i < expr.pack.num_assigns; i++) {
             if (i > 0) {
@@ -812,29 +812,29 @@ void expr_pprint(FILE *to, int nesting, Expr expr) {
             }
 
             fprintf(to, ".%s = ", expr.pack.field_names[i]);
-            expr_pprint(to, nesting, expr.pack.assigns[i]);
+            expr_pprint(to, expr.pack.assigns[i]);
         }
         putc('}', to);
         break;
 
       case EXPR_MEMBER:
-        expr_pprint_(to, nesting, *expr.member.record);
+        expr_pprint_(to, *expr.member.record);
         fprintf(to, ".%s", expr.member.field);
         break;
 
       case EXPR_POINTER:
-        expr_pprint_(to, nesting, *expr.pointer);
+        expr_pprint_(to, *expr.pointer);
         putc('*', to);
         break;
 
       case EXPR_REFERENCE:
         putc('&', to);
-        expr_pprint_(to, nesting, *expr.reference);
+        expr_pprint_(to, *expr.reference);
         break;
 
       case EXPR_DEREFERENCE:
         putc('*', to);
-        expr_pprint_(to, nesting, *expr.dereference);
+        expr_pprint_(to, *expr.dereference);
         break;
     }
 }
@@ -858,7 +858,7 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
         // Fallthrough
 
       case STATEMENT_EXPR:
-        expr_pprint(to, nesting, statement.expr);
+        expr_pprint(to, statement.expr);
         fprintf(to, ";\n");
         break;
 
@@ -872,11 +872,11 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
         break;
 
       case STATEMENT_DECL:
-        expr_pprint(to, nesting, statement.decl.type);
+        expr_pprint(to, statement.decl.type);
         fprintf(to, " %s", statement.decl.name);
         if (statement.decl.is_initialized) {
             fprintf(to, " = ");
-            expr_pprint(to, nesting, statement.decl.initial_value);
+            expr_pprint(to, statement.decl.initial_value);
         }
         fprintf(to, ";\n");
         break;
@@ -888,7 +888,7 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
                 fprintf(to, "} else ");
             }
             fprintf(to, "if (");
-            expr_pprint(to, nesting, statement.ifthenelse.ifs[i]);
+            expr_pprint(to, statement.ifthenelse.ifs[i]);
             fprintf(to, ") {\n");
             block_pprint(to, nesting + 1, statement.ifthenelse.thens[i]);
         }
@@ -904,7 +904,7 @@ void statement_pprint(FILE *to, int nesting, Statement statement) {
 void top_level_pprint(FILE *to, TopLevel top_level) {
     switch (top_level.tag) {
        case TOP_LEVEL_FUNC:
-        expr_pprint(to, 0, top_level.func.ret_type);
+        expr_pprint(to, top_level.func.ret_type);
         fprintf(to, " %s(", top_level.name);
 
         for (size_t i = 0; i < top_level.func.num_params; i++) {
@@ -912,7 +912,7 @@ void top_level_pprint(FILE *to, TopLevel top_level) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, 0, top_level.func.param_types[i]);
+            expr_pprint(to, top_level.func.param_types[i]);
             if (top_level.func.param_names[i] != NULL) {
                 fprintf(to, " %s", top_level.func.param_names[i]);
             }

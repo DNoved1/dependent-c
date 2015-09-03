@@ -208,7 +208,7 @@ typedef struct {
 
 /* Free any resources associated with an expression. */
 void expr_free(Expr *expr);
-void expr_pprint(FILE *to, int nesting, Expr expr);
+void expr_pprint(FILE *to, Expr expr);
 
 /* Determine if two expressions are exactly equivalent. Does not take into
  * account alpha equivalence.

@@ -329,7 +329,7 @@ static bool type_infer_call(Context *context, Expr expr, Expr *result) {
 
     if (func_type.tag != EXPR_FUNC_TYPE) {
         fprintf(stderr, "Cannot call non-function type (");
-        expr_pprint(stderr, 0, func_type);
+        expr_pprint(stderr, func_type);
         fprintf(stderr, ").\n");
 
         expr_free(&func_type);
@@ -553,7 +553,7 @@ static bool type_infer_pack(Context *context, Expr expr, Expr *result) {
     } else {
 
         fprintf(stderr, "Cannot pack into non-struct and non-union type (");
-        expr_pprint(stderr, 0, *expr.pack.type);
+        expr_pprint(stderr, *expr.pack.type);
         fprintf(stderr, ").\n");
 
         return false;
@@ -591,7 +591,7 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
 
         fprintf(stderr, "Accessing field \"%s\" which does not exist in "
             "struct type (", expr.member.field);
-        expr_pprint(stderr, 0, record_type);
+        expr_pprint(stderr, record_type);
         fprintf(stderr, ").\n");
         expr_free(&record_type);
         return false;
@@ -607,14 +607,14 @@ static bool type_infer_member(Context *context, Expr expr, Expr *result) {
 
         fprintf(stderr, "Accessing field \"%s\" which does not exist in "
             "union type (", expr.member.field);
-        expr_pprint(stderr, 0, record_type);
+        expr_pprint(stderr, record_type);
         fprintf(stderr, ").\n");
         expr_free(&record_type);
         return false;
 
     } else {
         fprintf(stderr, "Non-struct and non-union type (");
-        expr_pprint(stderr, 0, record_type);
+        expr_pprint(stderr, record_type);
         fprintf(stderr, ") does not have field \"%s\".\n", expr.member.field);
         expr_free(&record_type);
         return false;
@@ -711,9 +711,9 @@ bool type_equal(Context *context, Expr type1, Expr type2) {
         return true;
     } else {
         fprintf(stderr, "Could not determine that (");
-        expr_pprint(stderr, 0, type1);
+        expr_pprint(stderr, type1);
         fprintf(stderr, ") ~ (");
-        expr_pprint(stderr, 0, type2);
+        expr_pprint(stderr, type2);
         fprintf(stderr, ").\n");
         return false;
     }
