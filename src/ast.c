@@ -161,7 +161,7 @@ static Literal literal_copy(Literal x) {
 }
 
 Expr expr_copy(Expr x) {
-    Expr y = {.tag = x.tag};
+    Expr y = {.location = x.location, .tag = x.tag};
 
     switch (x.tag) {
       case EXPR_LITERAL:

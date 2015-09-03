@@ -108,10 +108,10 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %type <literal> literal
 %type <expr> simple_expr postfix_expr prefix_expr add_expr relational_expr
 %type <expr> equality_expr expr
-%type <statement> statement
+%type <statement> statement statement_
 %type <if_list> else_if_parts
 %type <block> else_part
-%type <top_level> top_level
+%type <top_level> top_level top_level_
 %type <unit> translation_unit
 
 %type <type_ident_list> type_ident_list
@@ -285,10 +285,18 @@ equality_expr:
     ;
 
 expr:
-      equality_expr
+      equality_expr {
+        $$.location.line = @1.first_line;
+        $$.location.column = @1.first_column; }
     ;
 
 statement:
+      statement_ {
+        $$.location.line = @1.first_line;
+        $$.location.column = @1.first_column; }
+    ;
+
+statement_:
       ';' {
         $$.tag = STATEMENT_EMPTY; }
     | expr ';' {
@@ -350,6 +358,12 @@ else_part:
     ;
 
 top_level:
+      top_level_ {
+        $$.location.line = @1.first_line;
+        $$.location.column = @1.first_column; }
+    ;
+
+top_level_:
     /* TODO: note that param_list allows non-named params, which we don't
              want here. */
       expr TOK_IDENT '(' param_list ')' block {

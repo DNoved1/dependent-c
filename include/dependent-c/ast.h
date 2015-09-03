@@ -6,6 +6,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
+/***** Location Information **************************************************/
+typedef struct {
+    unsigned line;
+    unsigned column;
+} LocationInfo;
+
 /***** Literals **************************************************************/
 typedef enum {
     // The type of types
@@ -68,6 +74,8 @@ typedef enum {
 
 typedef struct Expr Expr;
 struct Expr {
+    LocationInfo location;
+
     ExprTag tag;
     union {
         Literal literal;
@@ -148,6 +156,8 @@ typedef struct {
 } Block;
 
 struct Statement {
+    LocationInfo location;
+
     StatementTag tag;
     union {
         Expr expr;
@@ -176,8 +186,10 @@ typedef enum {
 } TopLevelTag;
 
 typedef struct {
-    TopLevelTag tag;
+    LocationInfo location;
     const char *name;
+
+    TopLevelTag tag;
     union {
         struct {
             Expr ret_type;
