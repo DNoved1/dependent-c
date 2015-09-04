@@ -223,12 +223,12 @@ prefix_expr:
         *$$.ifthenelse.else_ = $6; }
     | '&' prefix_expr {
         $$.tag = EXPR_REFERENCE;
-        alloc($$.reference);
-        *$$.reference = $2; }
+        alloc($$.pointer);
+        *$$.pointer = $2; }
     | '*' prefix_expr {
         $$.tag = EXPR_DEREFERENCE;
-        alloc($$.dereference);
-        *$$.dereference = $2; }
+        alloc($$.pointer);
+        *$$.pointer = $2; }
     ;
 
 add_expr:

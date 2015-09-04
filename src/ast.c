@@ -135,13 +135,9 @@ bool expr_equal(const Expr *x, const Expr *y) {
         return true;
 
       case EXPR_POINTER:
-        return expr_equal(x->pointer, y->pointer);
-
       case EXPR_REFERENCE:
-        return expr_equal(x->reference, y->reference);
-
       case EXPR_DEREFERENCE:
-        return expr_equal(x->dereference, y->dereference);
+        return expr_equal(x->pointer, y->pointer);
 
       case EXPR_STATEMENT:
         // TODO
@@ -254,18 +250,10 @@ Expr expr_copy(const Expr *x) {
         break;
 
       case EXPR_POINTER:
+      case EXPR_REFERENCE:
+      case EXPR_DEREFERENCE:
         alloc(y.pointer);
         *y.pointer = expr_copy(x->pointer);
-        break;
-
-      case EXPR_REFERENCE:
-        alloc(y.reference);
-        *y.reference = expr_copy(x->reference);
-        break;
-
-      case EXPR_DEREFERENCE:
-        alloc(y.dereference);
-        *y.dereference = expr_copy(x->dereference);
         break;
 
       case EXPR_STATEMENT:
@@ -363,15 +351,9 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
         break;
 
       case EXPR_POINTER:
-        expr_free_vars(expr->pointer, free_vars);
-        break;
-
       case EXPR_REFERENCE:
-        expr_free_vars(expr->reference, free_vars);
-        break;
-
       case EXPR_DEREFERENCE:
-        expr_free_vars(expr->dereference, free_vars);
+        expr_free_vars(expr->pointer, free_vars);
         break;
 
       case EXPR_STATEMENT:
@@ -561,13 +543,9 @@ bool expr_subst(Context *context, Expr *expr,
         return expr_subst(context, expr->member.record, name, replacement);
 
       case EXPR_POINTER:
-        return expr_subst(context, expr->pointer, name, replacement);
-
       case EXPR_REFERENCE:
-        return expr_subst(context, expr->reference, name, replacement);
-
       case EXPR_DEREFERENCE:
-        return expr_subst(context, expr->dereference, name, replacement);
+        return expr_subst(context, expr->pointer, name, replacement);
 
       case EXPR_STATEMENT:
         return statement_subst(context, expr->statement, name, replacement);
@@ -817,18 +795,10 @@ void expr_free(Expr *expr) {
         break;
 
       case EXPR_POINTER:
+      case EXPR_REFERENCE:
+      case EXPR_DEREFERENCE:
         expr_free(expr->pointer);
         dealloc(expr->pointer);
-        break;
-
-      case EXPR_REFERENCE:
-        expr_free(expr->reference);
-        dealloc(expr->reference);
-        break;
-
-      case EXPR_DEREFERENCE:
-        expr_free(expr->dereference);
-        dealloc(expr->dereference);
         break;
 
       case EXPR_STATEMENT:
@@ -1059,12 +1029,12 @@ void expr_pprint(FILE *to, const Expr *expr) {
 
       case EXPR_REFERENCE:
         putc('&', to);
-        expr_pprint_(to, expr->reference);
+        expr_pprint_(to, expr->pointer);
         break;
 
       case EXPR_DEREFERENCE:
         putc('*', to);
-        expr_pprint_(to, expr->dereference);
+        expr_pprint_(to, expr->pointer);
         break;
 
       case EXPR_STATEMENT:

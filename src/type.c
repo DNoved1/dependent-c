@@ -645,7 +645,7 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
         return true;
 
       case EXPR_REFERENCE:
-        if (!type_infer(context, expr->reference, temp)) {
+        if (!type_infer(context, expr->pointer, temp)) {
             return false;
         }
         result->tag = EXPR_POINTER;
@@ -654,7 +654,7 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
         return true;
 
       case EXPR_DEREFERENCE:
-        if (!type_infer(context, expr->dereference, temp)) {
+        if (!type_infer(context, expr->pointer, temp)) {
             return false;
         }
         if (temp->tag != EXPR_POINTER) {

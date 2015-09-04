@@ -135,9 +135,8 @@ struct Expr {
             const char *field;
         } member;
 
+        // Same field for reference and dereference
         Expr *pointer;
-        Expr *reference;
-        Expr *dereference;
 
         Statement *statement;
     };
