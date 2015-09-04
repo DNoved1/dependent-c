@@ -54,6 +54,11 @@ bool expr_equal(const Expr *x, const Expr *y) {
             && expr_equal(x->bin_op.expr1, y->bin_op.expr1)
             && expr_equal(x->bin_op.expr2, y->bin_op.expr2);
 
+      case EXPR_IFTHENELSE:
+        return expr_equal(x->ifthenelse.predicate, y->ifthenelse.predicate)
+            && expr_equal(x->ifthenelse.then_, y->ifthenelse.then_)
+            && expr_equal(x->ifthenelse.else_, y->ifthenelse.else_);
+
       case EXPR_FUNC_TYPE:
         if (!expr_equal(x->func_type.ret_type, y->func_type.ret_type)
                 || x->func_type.num_params != y->func_type.num_params) {
@@ -137,6 +142,10 @@ bool expr_equal(const Expr *x, const Expr *y) {
 
       case EXPR_DEREFERENCE:
         return expr_equal(x->dereference, y->dereference);
+
+      case EXPR_STATEMENT:
+        // TODO
+        return false;
     }
 }
 
@@ -173,6 +182,15 @@ Expr expr_copy(const Expr *x) {
         *y.bin_op.expr1 = expr_copy(x->bin_op.expr1);
         alloc(y.bin_op.expr2);
         *y.bin_op.expr2 = expr_copy(x->bin_op.expr2);
+        break;
+
+      case EXPR_IFTHENELSE:
+        alloc(y.ifthenelse.predicate);
+        *y.ifthenelse.predicate = expr_copy(x->ifthenelse.predicate);
+        alloc(y.ifthenelse.then_);
+        *y.ifthenelse.then_ = expr_copy(x->ifthenelse.then_);
+        alloc(y.ifthenelse.else_);
+        *y.ifthenelse.else_ = expr_copy(x->ifthenelse.else_);
         break;
 
       case EXPR_FUNC_TYPE:
@@ -249,6 +267,11 @@ Expr expr_copy(const Expr *x) {
         alloc(y.dereference);
         *y.dereference = expr_copy(x->dereference);
         break;
+
+      case EXPR_STATEMENT:
+        alloc(y.statement);
+        *y.statement = statement_copy(x->statement);
+        break;
     }
 
     return y;
@@ -270,6 +293,14 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
       case EXPR_BIN_OP:
         expr_free_vars(expr->bin_op.expr1, free_vars);
         expr_free_vars(expr->bin_op.expr2, free_vars_temp);
+        symbol_set_union(free_vars, free_vars_temp);
+        break;
+
+      case EXPR_IFTHENELSE:
+        expr_free_vars(expr->ifthenelse.predicate, free_vars);
+        expr_free_vars(expr->ifthenelse.then_, free_vars_temp);
+        symbol_set_union(free_vars, free_vars_temp);
+        expr_free_vars(expr->ifthenelse.else_, free_vars_temp);
         symbol_set_union(free_vars, free_vars_temp);
         break;
 
@@ -342,6 +373,9 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
       case EXPR_DEREFERENCE:
         expr_free_vars(expr->dereference, free_vars);
         break;
+
+      case EXPR_STATEMENT:
+        statement_free_vars(expr->statement, free_vars);
     }
 }
 
@@ -489,6 +523,11 @@ bool expr_subst(Context *context, Expr *expr,
         return expr_subst(context, expr->bin_op.expr1, name, replacement)
             && expr_subst(context, expr->bin_op.expr2, name, replacement);
 
+      case EXPR_IFTHENELSE:
+        return expr_subst(context, expr->ifthenelse.predicate, name, replacement)
+            && expr_subst(context, expr->ifthenelse.then_, name, replacement)
+            && expr_subst(context, expr->ifthenelse.else_, name, replacement);
+
       case EXPR_FUNC_TYPE:
         return expr_func_type_subst(context, expr, name, replacement);
 
@@ -529,7 +568,179 @@ bool expr_subst(Context *context, Expr *expr,
 
       case EXPR_DEREFERENCE:
         return expr_subst(context, expr->dereference, name, replacement);
+
+      case EXPR_STATEMENT:
+        return statement_subst(context, expr->statement, name, replacement);
     }
+}
+
+/***** Statement Management **************************************************/
+Statement statement_copy(const Statement *statement) {
+    Statement result = {.tag = statement->tag, .location = statement->location};
+
+    switch (statement->tag) {
+      case STATEMENT_EMPTY:
+        break;
+
+      case STATEMENT_EXPR:
+      case STATEMENT_RETURN:
+        result.expr = expr_copy(&statement->expr);
+        break;
+
+      case STATEMENT_BLOCK:
+        result.block = block_copy(&statement->block);
+        break;
+
+      case STATEMENT_DECL:
+        result.decl.type = expr_copy(&statement->decl.type);
+        result.decl.name = statement->decl.name;
+        result.decl.is_initialized = statement->decl.is_initialized;
+        if (result.decl.is_initialized) {
+            result.decl.initial_value =
+                expr_copy(&statement->decl.initial_value);
+        }
+        break;
+
+      case STATEMENT_IFTHENELSE:
+        result.ifthenelse.num_ifs = statement->ifthenelse.num_ifs;
+        alloc_array(result.ifthenelse.ifs, result.ifthenelse.num_ifs);
+        for (size_t i = 0; i < result.ifthenelse.num_ifs; i++) {
+            result.ifthenelse.ifs[i] = expr_copy(&statement->ifthenelse.ifs[i]);
+        }
+        alloc_array(result.ifthenelse.thens, result.ifthenelse.num_ifs);
+        for (size_t i = 0; i < result.ifthenelse.num_ifs; i++) {
+            result.ifthenelse.thens[i] =
+                block_copy(&statement->ifthenelse.thens[i]);
+        }
+        result.ifthenelse.else_ = block_copy(&statement->ifthenelse.else_);
+        break;
+    }
+
+    return result;
+}
+
+void statement_free_vars(const Statement *statement, SymbolSet *free_vars) {
+    SymbolSet free_vars_temp[1];
+
+    switch (statement->tag) {
+      case STATEMENT_EMPTY:
+        *free_vars = symbol_set_empty();
+        break;
+
+      case STATEMENT_EXPR:
+      case STATEMENT_RETURN:
+        expr_free_vars(&statement->expr, free_vars);
+        break;
+
+      case STATEMENT_BLOCK:
+        block_free_vars(&statement->block, free_vars);
+        break;
+
+      case STATEMENT_DECL:
+        expr_free_vars(&statement->decl.type, free_vars);
+        if (statement->decl.is_initialized) {
+            expr_free_vars(&statement->decl.initial_value, free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
+        }
+        break;
+
+      case STATEMENT_IFTHENELSE:
+        block_free_vars(&statement->ifthenelse.else_, free_vars);
+        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
+            expr_free_vars(&statement->ifthenelse.ifs[i], free_vars_temp);
+            symbol_set_union(free_vars, free_vars_temp);
+            block_free_vars(&statement->ifthenelse.thens[i], free_vars);
+            symbol_set_union(free_vars, free_vars_temp);
+        }
+        break;
+    }
+}
+
+bool statement_subst(Context *context, Statement *statement,
+        const char *name, const Expr *replacement) {
+    switch (statement->tag) {
+      case STATEMENT_EMPTY:
+        return true;
+
+      case STATEMENT_EXPR:
+      case STATEMENT_RETURN:
+        return expr_subst(context, &statement->expr, name, replacement);
+
+      case STATEMENT_BLOCK:
+        return block_subst(context, &statement->block, name, replacement);
+
+      case STATEMENT_DECL:
+        if (!expr_subst(context, &statement->decl.type, name, replacement)) {
+            return false;
+        }
+        if (statement->decl.is_initialized) {
+            return expr_subst(context, &statement->decl.initial_value,
+                name, replacement);
+        } else {
+            return true;
+        }
+
+      case STATEMENT_IFTHENELSE:
+        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
+            if (!expr_subst(context, &statement->ifthenelse.ifs[i],
+                        name, replacement)
+                    || !block_subst(context, &statement->ifthenelse.thens[i],
+                        name, replacement)) {
+                return false;
+            }
+        }
+        return block_subst(context, &statement->ifthenelse.else_,
+            name, replacement);
+    }
+}
+
+Block block_copy(const Block *block) {
+    Block result = {.num_statements = block->num_statements};
+    alloc_array(result.statements, result.num_statements);
+
+    for (size_t i = 0; i < result.num_statements; i++) {
+        result.statements[i] = statement_copy(&block->statements[i]);
+    }
+
+    return result;
+}
+
+void block_free_vars(const Block *block, SymbolSet *free_vars) {
+    SymbolSet free_vars_temp[1];
+    *free_vars = symbol_set_empty();
+
+    for (size_t i = 0; i < block->num_statements; i++) {
+        const Statement *statement = &block->statements[
+            block->num_statements - i - 1];
+
+        switch (statement->tag) {
+          case STATEMENT_DECL:
+            symbol_set_delete(free_vars, statement->decl.name);
+            break;
+
+          case STATEMENT_EMPTY:
+          case STATEMENT_EXPR:
+          case STATEMENT_RETURN:
+          case STATEMENT_BLOCK:
+          case STATEMENT_IFTHENELSE:
+            break;
+        }
+
+        statement_free_vars(statement, free_vars_temp);
+        symbol_set_union(free_vars, free_vars_temp);
+    }
+}
+
+bool block_subst(Context *context, Block *block,
+        const char *name, const Expr *replacement) {
+    for (size_t i = 0; i < block->num_statements; i++) {
+        if (!statement_subst(context, &block->statements[i],
+                name, replacement)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /***** Freeing ast nodes *****************************************************/
@@ -544,6 +755,15 @@ void expr_free(Expr *expr) {
         dealloc(expr->bin_op.expr1);
         expr_free(expr->bin_op.expr2);
         dealloc(expr->bin_op.expr2);
+        break;
+
+      case EXPR_IFTHENELSE:
+        expr_free(expr->ifthenelse.predicate);
+        dealloc(expr->ifthenelse.predicate);
+        expr_free(expr->ifthenelse.then_);
+        dealloc(expr->ifthenelse.then_);
+        expr_free(expr->ifthenelse.else_);
+        dealloc(expr->ifthenelse.else_);
         break;
 
       case EXPR_FUNC_TYPE:
@@ -610,6 +830,11 @@ void expr_free(Expr *expr) {
         expr_free(expr->dereference);
         dealloc(expr->dereference);
         break;
+
+      case EXPR_STATEMENT:
+        statement_free(expr->statement);
+        dealloc(expr->statement);
+        break;
     }
     memset(expr, 0, sizeof *expr);
 }
@@ -665,7 +890,7 @@ void top_level_free(TopLevel *top_level) {
         }
         dealloc(top_level->func.param_types);
         dealloc(top_level->func.param_names);
-        block_free(&top_level->func.block);
+        expr_free(&top_level->func.body);
         break;
     }
     memset(top_level, 0, sizeof *top_level);
@@ -721,6 +946,7 @@ static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
       tag_to_string(BIN_OP_GTE,     " >= ")
       tag_to_string(BIN_OP_ADD,     " + ")
       tag_to_string(BIN_OP_SUB,     " - ")
+      tag_to_string(BIN_OP_ANDTHEN, " >> ")
     }
 }
 #undef tag_to_string
@@ -748,6 +974,15 @@ void expr_pprint(FILE *to, const Expr *expr) {
         expr_pprint_(to, expr->bin_op.expr1);
         bin_op_pprint(to, expr->bin_op.op);
         expr_pprint_(to, expr->bin_op.expr2);
+        break;
+
+      case EXPR_IFTHENELSE:
+        fprintf(to, "if ");
+        expr_pprint(to, expr->ifthenelse.predicate);
+        fprintf(to, " then ");
+        expr_pprint(to, expr->ifthenelse.then_);
+        fprintf(to, " else ");
+        expr_pprint(to, expr->ifthenelse.else_);
         break;
 
       case EXPR_FUNC_TYPE:
@@ -798,9 +1033,9 @@ void expr_pprint(FILE *to, const Expr *expr) {
         break;
 
       case EXPR_PACK:
-        putc('(', to);
+        putc('[', to);
         expr_pprint_(to, expr->pack.type);
-        fprintf(to, "){");
+        fprintf(to, "]{");
         for (size_t i = 0; i < expr->pack.num_assigns; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
@@ -831,12 +1066,12 @@ void expr_pprint(FILE *to, const Expr *expr) {
         putc('*', to);
         expr_pprint_(to, expr->dereference);
         break;
-    }
-}
 
-static void block_pprint(FILE *to, int nesting, const Block *block) {
-    for (size_t i = 0; i < block->num_statements; i++) {
-        statement_pprint(to, nesting, &block->statements[i]);
+      case EXPR_STATEMENT:
+        putc('[', to);
+        statement_pprint(to, 0, expr->statement);
+        putc(']', to);
+        break;
     }
 }
 
@@ -894,6 +1129,12 @@ void statement_pprint(FILE *to, int nesting, const Statement *statement) {
     }
 }
 
+void block_pprint(FILE *to, int nesting, const Block *block) {
+    for (size_t i = 0; i < block->num_statements; i++) {
+        statement_pprint(to, nesting, &block->statements[i]);
+    }
+}
+
 void top_level_pprint(FILE *to, const TopLevel *top_level) {
     switch (top_level->tag) {
        case TOP_LEVEL_FUNC:
@@ -910,9 +1151,9 @@ void top_level_pprint(FILE *to, const TopLevel *top_level) {
                 fprintf(to, " %s", top_level->func.param_names[i]);
             }
         }
-        fprintf(to, ") {\n");
-        block_pprint(to, 1, &top_level->func.block);
-        fprintf(to, "}\n");
+        fprintf(to, ") = \n    ");
+        expr_pprint(to, &top_level->func.body);
+        fprintf(to, ";\n");
         break;
     }
 }

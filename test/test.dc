@@ -1,23 +1,25 @@
-type Array(type T, u64 n) {
-    if (size == 0) {
-        return struct {};
-    } else {
-        return struct {T fst; Array(T, n - 1) snd; };
-    }
-}
+type Maybe(type T) =
+    struct {
+        bool valid;
+        if valid then T else struct {} value;
+    };
 
-type lift_bool(bool b, u64 foo) {
-    if (b) {
-        return struct {};
-    } else {
-        return union {};
-    }
-}
+Maybe(T) maybe(type T, Maybe(T) maybe, T default) =
+    if maybe.valid
+        then maybe.value
+        else default;
 
-T get(type T, u64 n, u64 i, lift_bool(i < n, 0) proof, Array(T, n) array) {
-    if (i == 0) {
-        return array.fst;
-    } else {
-        return get(T, n, i - 1, (struct{}){}, array.snd);
-    }
-}
+type Array(type T, u64 n) =
+    if size == 0
+        then struct {}
+        else struct {T fst; Array(T, n - 1) snd; };
+
+type lift_bool(bool b) =
+    if b
+        then struct {}
+        else union {};
+
+T get(type T, u64 n, u64 i, lift_bool(i < n) proof, Array(T, n) array) =
+    if i == 0
+        then array.fst
+        else get(T, n, i - 1, [struct{}]{}, array.snd);

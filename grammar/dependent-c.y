@@ -13,6 +13,7 @@
 %define api.pure full
 %param {Context *context}
 %locations
+%define parse.error verbose
 
 %union {
     /* Lexer values */
@@ -92,11 +93,13 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_UNION    "union"
 %token TOK_RETURN   "return"
 %token TOK_IF       "if"
+%token TOK_THEN     "then"
 %token TOK_ELSE     "else"
 %token TOK_EQ       "=="
 %token TOK_NE       "!="
 %token TOK_LTE      "<="
 %token TOK_GTE      ">="
+%token TOK_ANDTHEN  ">>"
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -169,6 +172,10 @@ simple_expr:
         $$.union_.num_fields = $3.len;
         $$.union_.field_types = $3.types;
         $$.union_.field_names = $3.idents; }
+    | '[' statement ']' {
+        $$.tag = EXPR_STATEMENT;
+        alloc($$.statement);
+        *$$.statement = $2; }
     ;
 
 postfix_expr:
@@ -195,7 +202,7 @@ postfix_expr:
         $$.func_type.num_params = $3.len;
         $$.func_type.param_types = $3.types;
         $$.func_type.param_names = $3.names; }
-    | '(' expr ')' '{' pack_init_list '}' {
+    | '[' expr ']' '{' pack_init_list '}' {
         $$.tag = EXPR_PACK;
         alloc($$.pack.type);
         *$$.pack.type = $2;
@@ -206,6 +213,14 @@ postfix_expr:
 
 prefix_expr:
       postfix_expr
+    | "if" expr "then" expr "else" prefix_expr {
+        $$.tag = EXPR_IFTHENELSE;
+        alloc($$.ifthenelse.predicate);
+        *$$.ifthenelse.predicate = $2;
+        alloc($$.ifthenelse.then_);
+        *$$.ifthenelse.then_ = $4;
+        alloc($$.ifthenelse.else_);
+        *$$.ifthenelse.else_ = $6; }
     | '&' prefix_expr {
         $$.tag = EXPR_REFERENCE;
         alloc($$.reference);
@@ -260,6 +275,13 @@ relational_expr:
     | relational_expr ">=" add_expr {
         $$.tag = EXPR_BIN_OP;
         $$.bin_op.op = BIN_OP_GTE;
+        alloc($$.bin_op.expr1);
+        *$$.bin_op.expr1 = $1;
+        alloc($$.bin_op.expr2);
+        *$$.bin_op.expr2 = $3; }
+    | relational_expr ">>" add_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.bin_op.op = BIN_OP_ANDTHEN;
         alloc($$.bin_op.expr1);
         *$$.bin_op.expr1 = $1;
         alloc($$.bin_op.expr2);
@@ -366,14 +388,14 @@ top_level:
 top_level_:
     /* TODO: note that param_list allows non-named params, which we don't
              want here. */
-      expr TOK_IDENT '(' param_list ')' block {
+      expr TOK_IDENT '(' param_list ')' '=' expr ';' {
         $$.tag = TOP_LEVEL_FUNC;
         $$.func.ret_type = $1;
         $$.name = $2;
         $$.func.num_params = $4.len;
         $$.func.param_types = $4.types;
         $$.func.param_names = $4.names;
-        $$.func.block = $6; }
+        $$.func.body = $7; }
     ;
 
 translation_unit:
@@ -589,6 +611,7 @@ start_of_function:;
         check_is_reserved(union,    TOK_UNION)
         check_is_reserved(return,   TOK_RETURN)
         check_is_reserved(if,       TOK_IF)
+        check_is_reserved(then,     TOK_THEN)
         check_is_reserved(else,     TOK_ELSE)
         else {
             const char *interned_ident = symbol_intern(&context->interns, ident);
@@ -646,6 +669,8 @@ start_of_function:;
         c = token_stream_pop_char(stream);
         if (c == '=') {
             return TOK_GTE;
+        } else if (c == '>') {
+            return TOK_ANDTHEN;
         } else {
             token_stream_push_char(stream, c);
             return '>';

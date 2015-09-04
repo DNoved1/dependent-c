@@ -6,6 +6,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
+typedef struct Literal          Literal;
+typedef struct Expr             Expr;
+typedef struct Statement        Statement;
+typedef struct Block            Block;
+typedef struct TopLevel         TopLevel;
+typedef struct TranslationUnit  TranslationUnit;
+
 /***** Location Information **************************************************/
 typedef struct {
     unsigned line;
@@ -29,13 +36,13 @@ typedef enum {
     , LIT_BOOLEAN
 } LiteralTag;
 
-typedef struct {
+struct Literal {
     LiteralTag tag;
     union {
         uint64_t integral;
         bool boolean;
     };
-} Literal;
+};
 
 /***** Expressions ***********************************************************/
 typedef enum {
@@ -47,6 +54,7 @@ typedef enum {
     , BIN_OP_GTE
     , BIN_OP_ADD
     , BIN_OP_SUB
+    , BIN_OP_ANDTHEN
 } BinaryOp;
 
 typedef enum {
@@ -54,6 +62,7 @@ typedef enum {
       EXPR_LITERAL
     , EXPR_IDENT
     , EXPR_BIN_OP
+    , EXPR_IFTHENELSE
 
     // Function type and destructor. Constructor is a declaration, not an
     // expression.
@@ -70,9 +79,11 @@ typedef enum {
     , EXPR_POINTER
     , EXPR_REFERENCE
     , EXPR_DEREFERENCE
+
+    // Statements viewed as expressions
+    , EXPR_STATEMENT
 } ExprTag;
 
-typedef struct Expr Expr;
 struct Expr {
     LocationInfo location;
 
@@ -85,6 +96,11 @@ struct Expr {
             Expr *expr1;
             Expr *expr2;
         } bin_op;
+        struct {
+            Expr *predicate;
+            Expr *then_;
+            Expr *else_;
+        } ifthenelse;
 
         struct {
             Expr *ret_type;
@@ -122,6 +138,8 @@ struct Expr {
         Expr *pointer;
         Expr *reference;
         Expr *dereference;
+
+        Statement *statement;
     };
 };
 
@@ -137,7 +155,15 @@ struct Expr {
         , .literal = (Literal){.tag = LIT_BOOL} \
     })
 
+#define literal_expr_void \
+    ((Expr){ \
+          .tag = EXPR_LITERAL \
+        , .literal = (Literal){.tag = LIT_VOID} \
+    })
+
 void expr_free(Expr *expr);
+Expr expr_copy(const Expr *x);
+
 void expr_pprint(FILE *to, const Expr *expr);
 
 /* Determine if two expressions are exactly equivalent. Does not take into
@@ -145,17 +171,18 @@ void expr_pprint(FILE *to, const Expr *expr);
  */
 bool expr_equal(const Expr *x, const Expr *y);
 
-/* Make a deep copy of an expression. */
-Expr expr_copy(const Expr *x);
-
 // Cyclical include problems...
 #include "dependent-c/symbol_table.h"
 
 /* Calculate the set of free variables in an expression. */
 void expr_free_vars(const Expr *expr, SymbolSet *set);
 
-
 /***** Statements ************************************************************/
+struct Block {
+    size_t num_statements;
+    Statement *statements;
+};
+
 typedef enum {
       STATEMENT_EMPTY
     , STATEMENT_EXPR
@@ -164,13 +191,6 @@ typedef enum {
     , STATEMENT_DECL
     , STATEMENT_IFTHENELSE
 } StatementTag;
-
-typedef struct Statement Statement;
-
-typedef struct {
-    size_t num_statements;
-    Statement *statements;
-} Block;
 
 struct Statement {
     LocationInfo location;
@@ -198,16 +218,24 @@ struct Statement {
 };
 
 void statement_free(Statement *statement);
+Statement statement_copy(const Statement *statement);
+
 void statement_pprint(FILE *to, int nesting, const Statement *statement);
+void statement_free_vars(const Statement *statement, SymbolSet *free_vars);
 
 void block_free(Block *block);
+Block block_copy(const Block *block);
+
+// Note: does not print any braces
+void block_pprint(FILE *to, int nesting, const Block *block);
+void block_free_vars(const Block *block, SymbolSet *free_vars);
 
 /***** Top-Level Definitions *************************************************/
 typedef enum {
       TOP_LEVEL_FUNC
 } TopLevelTag;
 
-typedef struct {
+struct TopLevel {
     LocationInfo location;
     const char *name;
 
@@ -218,21 +246,20 @@ typedef struct {
             size_t num_params;
             Expr *param_types;
             const char **param_names;
-            Block block;
+            Expr body;
         } func;
     };
-} TopLevel;
-
+};
 
 void top_level_free(TopLevel *top_level);
 void top_level_pprint(FILE *to, const TopLevel *top_level);
 
 /***** Translation Units *****************************************************/
 
-typedef struct {
+struct TranslationUnit {
     size_t num_top_levels;
     TopLevel *top_levels;
-} TranslationUnit;
+};
 
 void translation_unit_free(TranslationUnit *unit);
 void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
@@ -244,6 +271,12 @@ void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
 
 /* Substitute a variable in an expression for an expression. */
 bool expr_subst(Context *context, Expr *expr,
+    const char *name, const Expr *replacement);
+
+bool statement_subst(Context *context, Statement *statement,
+    const char *name, const Expr *replacement);
+
+bool block_subst(Context *context, Block *block,
     const char *name, const Expr *replacement);
 
 #endif /* DEPENDENT_C_AST */

@@ -11,73 +11,6 @@
 #include "dependent-c/type.h"
 
 /***** Top Level Dependency Analysis *****************************************/
-
-static void block_free_vars(const Block *block, SymbolSet *free_vars);
-
-static void statement_free_vars(const Statement *statement,
-        SymbolSet *free_vars) {
-    SymbolSet free_vars_temp[1];
-
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        *free_vars = symbol_set_empty();
-        break;
-
-      case STATEMENT_EXPR:
-      case STATEMENT_RETURN:
-        expr_free_vars(&statement->expr, free_vars);
-        break;
-
-      case STATEMENT_BLOCK:
-        block_free_vars(&statement->block, free_vars);
-        break;
-
-      case STATEMENT_DECL:
-        expr_free_vars(&statement->decl.type, free_vars);
-        if (statement->decl.is_initialized) {
-            expr_free_vars(&statement->decl.initial_value, free_vars_temp);
-            symbol_set_union(free_vars, free_vars_temp);
-        }
-        break;
-
-      case STATEMENT_IFTHENELSE:
-        block_free_vars(&statement->ifthenelse.else_, free_vars);
-        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
-            expr_free_vars(&statement->ifthenelse.ifs[i], free_vars_temp);
-            symbol_set_union(free_vars, free_vars_temp);
-            block_free_vars(&statement->ifthenelse.thens[i], free_vars);
-            symbol_set_union(free_vars, free_vars_temp);
-        }
-        break;
-    }
-}
-
-static void block_free_vars(const Block *block, SymbolSet *free_vars) {
-    SymbolSet free_vars_temp[1];
-    *free_vars = symbol_set_empty();
-
-    for (size_t i = 0; i < block->num_statements; i++) {
-        const Statement *statement = &block->statements[
-            block->num_statements - i - 1];
-
-        switch (statement->tag) {
-          case STATEMENT_DECL:
-            symbol_set_delete(free_vars, statement->decl.name);
-            break;
-
-          case STATEMENT_EMPTY:
-          case STATEMENT_EXPR:
-          case STATEMENT_RETURN:
-          case STATEMENT_BLOCK:
-          case STATEMENT_IFTHENELSE:
-            break;
-        }
-
-        statement_free_vars(statement, free_vars_temp);
-        symbol_set_union(free_vars, free_vars_temp);
-    }
-}
-
 static void top_level_free_vars(const TopLevel *top_level,
         SymbolSet *free_vars) {
     SymbolSet free_vars_temp[1];
@@ -92,7 +25,7 @@ static void top_level_free_vars(const TopLevel *top_level,
             , .func_type.param_names = top_level->func.param_names
         };
         expr_free_vars(&func_type, free_vars);
-        block_free_vars(&top_level->func.block, free_vars_temp);
+        expr_free_vars(&top_level->func.body, free_vars_temp);
         symbol_set_union(free_vars, free_vars_temp);
         break;
     }
@@ -219,7 +152,7 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
         return false;
     }
 
-    bool is_integral = false, is_boolean = false;
+    bool is_integral = false, is_boolean = false, is_type = false;
     switch (op_type.literal.tag) {
       case LIT_U8:      case LIT_S8:
       case LIT_U16:     case LIT_S16:
@@ -233,6 +166,9 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
         break;
 
       case LIT_TYPE:
+        is_type = true;
+        break;
+
       case LIT_VOID:
       case LIT_INTEGRAL:
       case LIT_BOOLEAN:
@@ -276,6 +212,17 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
         } else {
             fprintf(stderr, "Additive expressions only operate on integral "
                 "types.\n");
+            expr_free(&op_type);
+            return false;
+        }
+
+      case BIN_OP_ANDTHEN:
+        if (is_type) {
+            *result = literal_expr_type;
+            expr_free(&op_type);
+            return true;
+        } else {
+            fprintf(stderr, "Sequencing operator only operates on types.\n");
             expr_free(&op_type);
             return false;
         }
@@ -619,6 +566,7 @@ static bool type_infer_member(Context *context, const Expr *expr, Expr *result) 
 
 bool type_infer(Context *context, const Expr *expr, Expr *result) {
     Expr temp[1];
+    Expr temp2[1];
 
     switch (expr->tag) {
       case EXPR_LITERAL:
@@ -633,6 +581,27 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
 
       case EXPR_BIN_OP:
         return type_infer_bin_op(context, expr, result);
+
+      case EXPR_IFTHENELSE:
+        if (!type_check(context, expr->ifthenelse.predicate,
+                &literal_expr_bool)) {
+            return false;
+        }
+        if (!type_infer(context, expr->ifthenelse.then_, temp)) {
+            return false;
+        }
+        if (!type_infer(context, expr->ifthenelse.else_, temp2)) {
+            expr_free(temp);
+            return false;
+        }
+        result->tag = EXPR_IFTHENELSE;
+        alloc(result->ifthenelse.predicate);
+        *result->ifthenelse.predicate = expr_copy(expr->ifthenelse.predicate);
+        alloc(result->ifthenelse.then_);
+        *result->ifthenelse.then_ = *temp;
+        alloc(result->ifthenelse.else_);
+        *result->ifthenelse.else_ = *temp2;
+        return true;
 
       case EXPR_FUNC_TYPE:
         return type_infer_func_type(context, expr, result);
@@ -694,6 +663,9 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
         *result = expr_copy(temp->pointer);
         expr_free(temp);
         return true;
+
+      case EXPR_STATEMENT:
+        return type_infer_statement(context, expr->statement, result);
     }
 }
 
@@ -713,99 +685,95 @@ bool type_equal(Context *context, const Expr *type1, const Expr *type2) {
     }
 }
 
-static bool type_check_statement(Context *context, const Statement *statement,
-    const Expr *ret_type, bool *returns);
-
-static bool type_check_block(Context *context, const Block *block,
-        const Expr *ret_type, bool *returns) {
-    *returns = false;
-    bool returns_temp;
-
-    for (size_t i = 0; i < block->num_statements; i++) {
-        if (!type_check_statement(context, &block->statements[i],
-                ret_type, &returns_temp)) {
-            return false;
-        }
-
-        *returns |= returns_temp;
-        if (returns_temp && i != block->num_statements - 1) {
-            fprintf(stderr, "Warning: Dead code.\n");
-        }
-    }
-
-    return true;
-}
-
-static bool type_check_statement(Context *context, const Statement *statement,
-        const Expr *ret_type, bool *returns) {
-    Expr temp;
-    *returns = false;
-    bool returns_temp;
+bool type_infer_statement(Context *context, const Statement *statement,
+        Expr *result) {
+    Expr temp[1];
+    Expr temp2[1];
 
     switch (statement->tag) {
       case STATEMENT_EMPTY:
+        *result = literal_expr_void;
         return true;
 
       case STATEMENT_EXPR:
-        if (!type_infer(context, &statement->expr, &temp)) {
+        if (!type_infer(context, &statement->expr, temp)) {
             return false;
         }
-        expr_free(&temp);
+        expr_free(temp);
+        *result = literal_expr_void;
         return true;
 
       case STATEMENT_RETURN:
-        *returns = true;
-        return type_check(context, &statement->expr, ret_type);
+        return type_infer(context, &statement->expr, result);
 
       case STATEMENT_BLOCK:
-        symbol_table_enter_scope(&context->symbol_table);
-        if (!type_check_block(context, &statement->block, ret_type, returns)) {
-            symbol_table_leave_scope(&context->symbol_table);
-            return false;
-        }
-        symbol_table_leave_scope(&context->symbol_table);
-        return true;
+        return type_infer_block(context, &statement->block, result);
 
       case STATEMENT_DECL:
         if (!type_check(context, &statement->decl.type, &literal_expr_type)) {
             return false;
         }
-        if (statement->decl.is_initialized) {
-            if (!type_check(context, &statement->decl.initial_value,
-                    &statement->decl.type)) {
-                return false;
-            }
+        if (statement->decl.is_initialized && !type_check(context,
+                &statement->decl.initial_value, &statement->decl.type)) {
+            return false;
         }
         symbol_table_register_local(&context->symbol_table,
             statement->decl.name, statement->decl.type);
+        *result = literal_expr_void;
         return true;
 
       case STATEMENT_IFTHENELSE:
-        *returns = true;
-        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
-            if (!type_check(context, &statement->ifthenelse.ifs[i],
-                    &literal_expr_bool)) {
-                return false;
-            }
-            symbol_table_enter_scope(&context->symbol_table);
-            if (!type_check_block(context, &statement->ifthenelse.thens[i],
-                    ret_type, &returns_temp)) {
-                symbol_table_leave_scope(&context->symbol_table);
-                return false;
-            }
-            symbol_table_leave_scope(&context->symbol_table);
-            *returns &= returns_temp;
-        }
-        symbol_table_enter_scope(&context->symbol_table);
-        if (!type_check_block(context, &statement->ifthenelse.else_,
-                ret_type, &returns_temp)) {
-            symbol_table_leave_scope(&context->symbol_table);
+        if (!type_infer_block(context, &statement->ifthenelse.else_, result)) {
             return false;
         }
-        symbol_table_leave_scope(&context->symbol_table);
-        *returns &= returns_temp;
+        for (size_t i_ = 0; i_ < statement->ifthenelse.num_ifs; i_++) {
+            size_t i = statement->ifthenelse.num_ifs - i_ - 1;
+
+            if (type_infer_block(context, &statement->ifthenelse.thens[i],
+                    temp)) {
+                temp2->tag = EXPR_IFTHENELSE;
+                alloc(temp2->ifthenelse.predicate);
+                *temp2->ifthenelse.predicate =
+                    expr_copy(&statement->ifthenelse.ifs[i]);
+                alloc(temp2->ifthenelse.then_);
+                *temp2->ifthenelse.then_ = *temp;
+                alloc(temp2->ifthenelse.else_);
+                *temp2->ifthenelse.else_ = *result;
+                *result = *temp2;
+            } else {
+                expr_free(result);
+                return false;
+            }
+        }
         return true;
     }
+}
+
+bool type_infer_block(Context *context, const Block *block, Expr *result) {
+    Expr temp[1];
+    Expr temp2[1];
+
+    symbol_table_enter_scope(&context->symbol_table);
+    *result = literal_expr_void;
+
+    for (size_t i = 0; i < block->num_statements; i++) {
+        if (type_infer_statement(context, &block->statements[i], temp)) {
+            temp2->tag = EXPR_BIN_OP;
+            temp2->bin_op.op = BIN_OP_ANDTHEN;
+            alloc(temp2->bin_op.expr1);
+            *temp2->bin_op.expr1 = *result;
+            alloc(temp2->bin_op.expr2);
+            *temp2->bin_op.expr2 = *temp;
+            *result = *temp2;
+        } else {
+            symbol_table_leave_scope(&context->symbol_table);
+            expr_free(result);
+            return false;
+        }
+    }
+
+    symbol_table_leave_scope(&context->symbol_table);
+    return true;
 }
 
 bool type_check_top_level(Context *context, const TopLevel *top_level) {
@@ -829,26 +797,12 @@ bool type_check_top_level(Context *context, const TopLevel *top_level) {
                 top_level->func.param_names[i],
                 top_level->func.param_types[i]);
         }
-        bool returns = false, returns_temp;
-        for (size_t i = 0; i < top_level->func.block.num_statements; i++) {
-            if (!type_check_statement(context,
-                    &top_level->func.block.statements[i],
-                    &top_level->func.ret_type,
-                    &returns_temp)) {
-                symbol_table_leave_scope(&context->symbol_table);
-                return false;
-            }
-            returns |= returns_temp;
-            if (returns_temp && i != top_level->func.block.num_statements - 1) {
-                fprintf(stderr, "Warning: Dead code.\n");
-            }
-        }
-        symbol_table_leave_scope(&context->symbol_table);
-        if (!returns) {
-            fprintf(stderr, "Function \"%s\" does not return.\n",
-                top_level->name);
+        if (!type_check(context, &top_level->func.body,
+                &top_level->func.ret_type)) {
+            symbol_table_leave_scope(&context->symbol_table);
             return false;
         }
+        symbol_table_leave_scope(&context->symbol_table);
         return true;
     }
 }
