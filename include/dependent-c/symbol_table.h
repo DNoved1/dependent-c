@@ -29,6 +29,8 @@ typedef struct {
     size_t num_globals;
     const char **global_names;
     Expr *global_types;
+    bool *global_defined;
+    Expr *global_defines;
 
     size_t locals_stack_size;
     struct {
@@ -50,11 +52,18 @@ void symbol_table_leave_scope(SymbolTable *symbols);
  */
 bool symbol_table_register_global(SymbolTable *symbols,
     const char *name, Expr type);
+// The symbol must be registered first
+bool symbol_table_define_global(SymbolTable *symbols,
+    const char *name, Expr definition);
 bool symbol_table_register_local(SymbolTable *symbols,
     const char *name, Expr type);
 
 /* Lookup a symbol's type. Returns false if the symbol is not in scope. */
 bool symbol_table_lookup(SymbolTable *symbols,
+    const char *name, Expr *result);
+
+/* Lookup a symbol's definition. Returns false if the symbol is not defined. */
+bool symbol_table_lookup_define(SymbolTable *symbols,
     const char *name, Expr *result);
 
 /* Print the contents of the symbol table. */

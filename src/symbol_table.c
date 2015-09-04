@@ -137,6 +137,8 @@ SymbolTable symbol_table_new(void) {
           .num_globals = 0
         , .global_names = NULL
         , .global_types = NULL
+        , .global_defined = NULL
+        , .global_defines = NULL
 
         , .locals_stack_size = 0
         , .locals_stack = NULL
@@ -146,6 +148,8 @@ SymbolTable symbol_table_new(void) {
 void symbol_table_free(SymbolTable *symbols) {
     dealloc(symbols->global_names);
     dealloc(symbols->global_types);
+    dealloc(symbols->global_defined);
+    dealloc(symbols->global_defines);
 
     for (size_t i = 0; i < symbols->locals_stack_size; i++) {
         dealloc(symbols->locals_stack[i].local_names);
@@ -186,9 +190,28 @@ bool symbol_table_register_global(SymbolTable *symbols,
     symbols->global_names[symbols->num_globals] = name;
     realloc_array(symbols->global_types, symbols->num_globals + 1);
     symbols->global_types[symbols->num_globals] = type;
+    realloc_array(symbols->global_defined, symbols->num_globals + 1);
+    symbols->global_defined[symbols->num_globals] = false;
+    realloc_array(symbols->global_defines, symbols->num_globals + 1);
 
     symbols->num_globals += 1;
     return true;
+}
+
+bool symbol_table_define_global(SymbolTable *symbols,
+        const char *name, Expr definition) {
+    for (size_t i = 0; i < symbols->num_globals; i++) {
+        if (strcmp(name, symbols->global_names[i]) == 0) {
+            if (symbols->global_defined[i]) {
+                return false;
+            } else {
+                symbols->global_defines[i] = definition;
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 bool symbol_table_register_local(SymbolTable *symbols,
@@ -230,6 +253,22 @@ bool symbol_table_lookup(SymbolTable *symbols,
         if (strcmp(name, symbols->global_names[i]) == 0) {
             *result = symbols->global_types[i];
             return true;
+        }
+    }
+
+    return false;
+}
+
+bool symbol_table_lookup_define(SymbolTable *symbols,
+        const char *name, Expr *result) {
+    for (size_t i = 0; i < symbols->num_globals; i++) {
+        if (strcmp(name, symbols->global_names[i]) == 0) {
+            if (symbols->global_defined[i]) {
+                *result = symbols->global_defines[i];
+                return false;
+            } else {
+                return false;
+            }
         }
     }
 
