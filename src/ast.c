@@ -590,8 +590,10 @@ bool expr_subst(Context *context, Expr *expr,
         return true;
 
       case EXPR_IDENT:
-        expr_free(expr);
-        *expr = expr_copy(replacement);
+        if (name == expr->ident) {
+            expr_free(expr);
+            *expr = expr_copy(replacement);
+        }
         return true;
 
       case EXPR_BIN_OP:
