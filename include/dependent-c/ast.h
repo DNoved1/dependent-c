@@ -19,6 +19,9 @@ typedef struct {
     unsigned column;
 } LocationInfo;
 
+/* For printing error messages. */
+void location_pprint(const char *file, const LocationInfo *info);
+
 /***** Literals **************************************************************/
 typedef enum {
     // The type of types

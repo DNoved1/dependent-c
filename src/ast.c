@@ -989,6 +989,11 @@ static void print_indentation_whitespace(FILE *to, int nesting) {
     }
 }
 
+void location_pprint(const char *file, const LocationInfo *info) {
+    fprintf(stderr, "    At file %s, line %u, column %u.\n",
+        file, info->line, info->column);
+}
+
 #define tag_to_string(tag, str) case tag: fprintf(to, str); break;
 static void literal_pprint(FILE *to, const Literal *literal) {
     switch (literal->tag) {

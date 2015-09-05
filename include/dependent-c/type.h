@@ -17,6 +17,7 @@ bool top_level_topological_sort(size_t len, const TopLevel top_levels[len],
 bool type_check(Context *context, const Expr *expr, const Expr *type);
 bool type_infer(Context *context, const Expr *expr, Expr *result);
 bool type_equal(Context *context, const Expr *type1, const Expr *type2);
+bool type_eval(Context *context, const Expr *type, Expr *result);
 
 bool type_infer_statement(Context *context, const Statement *statement,
     Expr *result);

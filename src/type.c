@@ -530,9 +530,13 @@ static bool type_infer_member(Context *context, const Expr *expr, Expr *result) 
     assert(expr->tag == EXPR_MEMBER);
     Expr record_type;
 
-    if (!type_infer(context, expr->member.record, &record_type)) {
+    if (!type_infer(context, expr->member.record, result)) {
         return false;
     }
+    if (!type_eval(context, result, &record_type)) {
+        record_type = expr_copy(result);
+    }
+    expr_free(result);
 
     if (record_type.tag == EXPR_STRUCT) {
         // TODO: in the case that this is a dependent field being accessed we
@@ -597,6 +601,8 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
 
       case EXPR_IDENT:
         if (!symbol_table_lookup(&context->symbol_table, expr->ident, temp)) {
+            fprintf(stderr, "Unbound symbol \"%s\".\n", expr->ident);
+            location_pprint(context->source_name, &expr->location);
             return false;
         }
         *result = expr_copy(temp);
@@ -696,18 +702,218 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
 }
 
 bool type_equal(Context *context, const Expr *type1, const Expr *type2) {
-    // TODO, do normalization and alpha equivalence rather than simple
-    // structural equivalence.
+    // TODO, do alpha equivalence rather than simple structural equivalence.
 
-    if (expr_equal(type1, type2)) {
-        return true;
-    } else {
+    Expr type1_whnf[1], type2_whnf[1];
+    if (!type_eval(context, type1, type1_whnf)) {
+        *type1_whnf = expr_copy(type1);
+    }
+    if (!type_eval(context, type2, type2_whnf)) {
+        *type2_whnf = expr_copy(type2);
+    }
+
+    bool ret_val = expr_equal(type1_whnf, type2_whnf);
+    expr_free(type1_whnf);
+    expr_free(type2_whnf);
+
+    if (!ret_val) {
         fprintf(stderr, "Could not determine that (");
         expr_pprint(stderr, type1);
         fprintf(stderr, ") ~ (");
         expr_pprint(stderr, type2);
         fprintf(stderr, ").\n");
+    }
+
+    return ret_val;
+}
+
+static bool type_eval_bin_op(Context *context, const Expr *type, Expr *result) {
+    assert(type->tag == EXPR_BIN_OP);
+
+    Expr reduced_expr1[1], reduced_expr2[1];
+
+    if (!type_eval(context, type->bin_op.expr1, reduced_expr1)) {
         return false;
+    }
+    if (!type_eval(context, type->bin_op.expr2, reduced_expr2)) {
+        expr_free(reduced_expr1);
+        return false;
+    }
+
+    switch (type->bin_op.op) {
+      case BIN_OP_EQ:
+        if (reduced_expr1->tag == EXPR_LITERAL
+                && reduced_expr1->literal.tag == LIT_INTEGRAL
+                && reduced_expr2->tag == EXPR_LITERAL
+                && reduced_expr2->literal.tag == LIT_INTEGRAL) {
+            *result = (Expr){
+                  .tag = EXPR_LITERAL
+                , .literal.tag = LIT_BOOLEAN
+                , .literal.boolean = reduced_expr1->literal.integral
+                        == reduced_expr2->literal.integral
+            };
+            expr_free(reduced_expr1);
+            expr_free(reduced_expr2);
+            return true;
+        } else {
+            expr_free(reduced_expr1);
+            expr_free(reduced_expr2);
+            *result = expr_copy(type);
+            return true;
+        }
+
+      case BIN_OP_NE:
+      case BIN_OP_LT:
+      case BIN_OP_LTE:
+      case BIN_OP_GT:
+      case BIN_OP_GTE:
+      case BIN_OP_ADD:
+        expr_free(reduced_expr1);
+        expr_free(reduced_expr2);
+        *result = expr_copy(type);
+        return true;
+
+      case BIN_OP_SUB:
+        if (reduced_expr1->tag == EXPR_LITERAL
+                && reduced_expr1->literal.tag == LIT_INTEGRAL
+                && reduced_expr2->tag == EXPR_LITERAL
+                && reduced_expr2->literal.tag == LIT_INTEGRAL) {
+            *result = (Expr){
+                  .tag = EXPR_LITERAL
+                , .literal.tag = LIT_INTEGRAL
+                , .literal.integral = reduced_expr1->literal.integral
+                        - reduced_expr2->literal.integral
+            };
+            expr_free(reduced_expr1);
+            expr_free(reduced_expr2);
+            return true;
+        } else {
+            expr_free(reduced_expr1);
+            expr_free(reduced_expr2);
+            *result = expr_copy(type);
+            return true;
+        }
+
+      case BIN_OP_ANDTHEN:
+        expr_free(reduced_expr1);
+        expr_free(reduced_expr2);
+        *result = expr_copy(type);
+        return true;
+    }
+}
+
+static bool type_eval_ifthenelse(Context *context, const Expr *type,
+        Expr *result) {
+    assert(type->tag == EXPR_IFTHENELSE);
+
+    // If both sides of the if branch are equivalent we can reduce to that
+    if (type_equal(context, type->ifthenelse.then_,
+            type->ifthenelse.else_)) {
+        return type_eval(context, type->ifthenelse.then_, result);
+    } else {
+        fprintf(stderr, "    While checking if both if-then-else branches "
+            "have the same type.\n");
+    }
+
+    Expr reduced_cond[1];
+    if (!type_eval(context, type->ifthenelse.predicate, reduced_cond)) {
+        return false;
+    }
+
+    if (reduced_cond->tag == EXPR_LITERAL
+            && reduced_cond->literal.tag == LIT_BOOLEAN) {
+        if (reduced_cond->literal.boolean) {
+            return type_eval(context, type->ifthenelse.then_, result);
+        } else {
+            return type_eval(context, type->ifthenelse.else_, result);
+        }
+    } else {
+        expr_free(reduced_cond);
+        return false;
+    }
+}
+
+static bool type_eval_call(Context *context, const Expr *type, Expr *result) {
+    assert(type->tag == EXPR_CALL);
+
+    Expr reduced_func[1];
+    if (!type_eval(context, type->call.func, reduced_func)) {
+        return false;
+    }
+
+    if (reduced_func->tag != EXPR_LAMBDA) {
+        fprintf(stderr, "Cannot evaluate type further because it attempts "
+            "to call non-function (");
+        expr_pprint(stderr, reduced_func);
+        fprintf(stderr, ").\n    Started with type (");
+        expr_pprint(stderr, type);
+        fprintf(stderr, ").\n");
+        expr_free(reduced_func);
+        return false;
+    }
+
+    // Just to make sure the arguments are of the correct type
+    if (!type_infer_call(context, type, result)) {
+        expr_free(reduced_func);
+        return false;
+    }
+    expr_free(result);
+
+    for (size_t i = 0; i < type->call.num_args; i++) {
+        if (!expr_subst(context, reduced_func->lambda.body,
+                reduced_func->lambda.param_names[i], &type->call.args[i])) {
+            expr_free(reduced_func);
+            return false;
+        }
+    }
+
+    bool ret_val = type_eval(context, reduced_func->lambda.body, result);
+    expr_free(reduced_func);
+    return ret_val;
+}
+
+bool type_eval(Context *context, const Expr *type, Expr *result) {
+    Expr temp[1];
+    // TODO, better normalization, up to whnf.
+
+    switch (type->tag) {
+      case EXPR_LITERAL:
+        *result = expr_copy(type);
+        return true;
+
+      case EXPR_IDENT:
+        if (symbol_table_lookup_define(&context->symbol_table,
+                type->ident, temp)) {
+            return type_eval(context, temp, result);
+        } else {
+            *result = expr_copy(type);
+            return true;
+        }
+
+      case EXPR_BIN_OP:
+        return type_eval_bin_op(context, type, result);
+
+      case EXPR_IFTHENELSE:
+        return type_eval_ifthenelse(context, type, result);
+
+      case EXPR_FUNC_TYPE:
+      case EXPR_LAMBDA:
+        *result = expr_copy(type);
+        return true;
+
+      case EXPR_CALL:
+        return type_eval_call(context, type, result);
+
+      case EXPR_STRUCT:
+      case EXPR_UNION:
+      case EXPR_PACK:
+      case EXPR_MEMBER:
+      case EXPR_POINTER:
+      case EXPR_REFERENCE:
+      case EXPR_DEREFERENCE:
+      case EXPR_STATEMENT:
+        *result = expr_copy(type);
+        return true;
     }
 }
 
@@ -803,31 +1009,47 @@ bool type_infer_block(Context *context, const Block *block, Expr *result) {
 }
 
 bool type_check_top_level(Context *context, const TopLevel *top_level) {
+    Expr temp[1];
+
     switch (top_level->tag) {
       case TOP_LEVEL_FUNC:;
-        const Expr func_type = (Expr) {
+        const Expr func_type = {
               .tag = EXPR_FUNC_TYPE
             , .func_type.ret_type = (Expr*)&top_level->func.ret_type
             , .func_type.num_params = top_level->func.num_params
             , .func_type.param_types = top_level->func.param_types
             , .func_type.param_names = top_level->func.param_names
         };
+        const Expr lambda = {
+              .tag = EXPR_LAMBDA
+            , .lambda.num_params = top_level->func.num_params
+            , .lambda.param_types = top_level->func.param_types
+            , .lambda.param_names = top_level->func.param_names
+            , .lambda.body = (Expr*)&top_level->func.body
+        };
         if (!type_check(context, &func_type, &literal_expr_type)) {
             return false;
         }
         symbol_table_register_global(&context->symbol_table,
             top_level->name, func_type);
+        symbol_table_define_global(&context->symbol_table,
+            top_level->name, lambda);
         symbol_table_enter_scope(&context->symbol_table);
         for (size_t i = 0; i < top_level->func.num_params; i++) {
             symbol_table_register_local(&context->symbol_table,
                 top_level->func.param_names[i],
                 top_level->func.param_types[i]);
         }
-        if (!type_check(context, &top_level->func.body,
-                &top_level->func.ret_type)) {
+        if (!type_infer(context, lambda.lambda.body, temp)) {
             symbol_table_leave_scope(&context->symbol_table);
             return false;
         }
+        if (!type_equal(context, &top_level->func.ret_type, temp)) {
+            expr_free(temp);
+            symbol_table_leave_scope(&context->symbol_table);
+            return false;
+        }
+        expr_free(temp);
         symbol_table_leave_scope(&context->symbol_table);
         return true;
     }
