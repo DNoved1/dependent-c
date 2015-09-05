@@ -206,6 +206,7 @@ bool symbol_table_define_global(SymbolTable *symbols,
                 return false;
             } else {
                 symbols->global_defines[i] = definition;
+                symbols->global_defined[i] = true;
                 return true;
             }
         }
@@ -265,7 +266,7 @@ bool symbol_table_lookup_define(SymbolTable *symbols,
         if (strcmp(name, symbols->global_names[i]) == 0) {
             if (symbols->global_defined[i]) {
                 *result = symbols->global_defines[i];
-                return false;
+                return true;
             } else {
                 return false;
             }
@@ -297,7 +298,16 @@ void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
 
         fprintf(to, " => ");
         expr_pprint(to, &symbols->global_types[i]);
-        fprintf(to, "\n");
+        putc('\n', to);
+        if (symbols->global_defined[i]) {
+            fprintf(to, "    ");
+            for (size_t j = 0; j < max_name_len; j++) {
+                putc(' ', to);
+            }
+            fprintf(to, " := ");
+            expr_pprint(to, &symbols->global_defines[i]);
+            putc('\n', to);
+        }
     }
 
     fprintf(to, "Local Symbols\n");
