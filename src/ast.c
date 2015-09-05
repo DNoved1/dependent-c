@@ -74,6 +74,18 @@ bool expr_equal(const Expr *x, const Expr *y) {
         }
         return true;
 
+      case EXPR_LAMBDA:
+        if (x->lambda.num_params != y->lambda.num_params) {
+            return false;
+        }
+        for (size_t i = 0; i < x->lambda.num_params; i++) {
+            if (!expr_equal(x->lambda.param_types, y->lambda.param_types)
+                    || x->lambda.param_names[i] != y->lambda.param_names[i]) {
+                return false;
+            }
+        }
+        return expr_equal(x->lambda.body, y->lambda.body);
+
       case EXPR_CALL:
         if (!expr_equal(x->call.func, y->call.func)
                 || x->call.num_args != y->call.num_args) {
@@ -201,6 +213,18 @@ Expr expr_copy(const Expr *x) {
         }
         break;
 
+      case EXPR_LAMBDA:
+        y.lambda.num_params = x->lambda.num_params;
+        alloc_array(y.lambda.param_types, y.lambda.num_params);
+        alloc_array(y.lambda.param_names, y.lambda.num_params);
+        for (size_t i = 0; i < y.lambda.num_params; i++) {
+            y.lambda.param_types[i] = expr_copy(&x->lambda.param_types[i]);
+            y.lambda.param_names[i] = x->lambda.param_names[i];
+        }
+        alloc(y.lambda.body);
+        *y.lambda.body = expr_copy(x->lambda.body);
+        break;
+
       case EXPR_CALL:
         alloc(y.call.func);
         *y.call.func = expr_copy(x->call.func);
@@ -311,6 +335,20 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
         }
         break;
 
+      case EXPR_LAMBDA:
+        expr_free_vars(expr->lambda.body, free_vars);
+        for (size_t i = 0; i < expr->lambda.num_params; i++) {
+            symbol_set_delete(free_vars, expr->lambda.param_names[i]);
+        }
+        for (size_t i = 0; i < expr->lambda.num_params; i++) {
+            expr_free_vars(&expr->lambda.param_types[i], free_vars_temp);
+            for (size_t j = 0; j < i; j++) {
+                symbol_set_delete(free_vars_temp, expr->lambda.param_names[j]);
+            }
+            symbol_set_union(free_vars, free_vars_temp);
+        }
+        break;
+
       case EXPR_CALL:
         expr_free_vars(expr->call.func, free_vars);
         for (size_t i = 0; i < expr->call.num_args; i++) {
@@ -416,6 +454,61 @@ end_of_function:
     return ret_val;
 }
 
+static bool expr_lambda_subst(Context *context, Expr *expr,
+        const char *name, const Expr *replacement) {
+    assert(expr->tag == EXPR_LAMBDA);
+    bool ret_val = false;
+
+    SymbolSet free_vars[1];
+    expr_free_vars(replacement, free_vars);
+
+    for (size_t i = 0; i < expr->lambda.num_params; i++) {
+        if (!expr_subst(context, &expr->lambda.param_types[i],
+                name, replacement)) {
+            goto end_of_function;
+        }
+
+        const char *old_param_name = expr->lambda.param_names[i];
+
+        if (old_param_name == name) {
+            ret_val = true;
+            goto end_of_function;
+        }
+
+        if (symbol_set_contains(free_vars, old_param_name)) {
+            const char *new_param_name = symbol_gensym(&context->interns,
+                old_param_name);
+            Expr new_replacement = (Expr){
+                  .tag = EXPR_IDENT
+                , .ident = new_param_name
+            };
+            expr->lambda.param_names[i] = new_param_name;
+
+            for (size_t j = i + 1; j < expr->func_type.num_params; j++) {
+                if (!expr_subst(context,
+                        &expr->lambda.param_types[i],
+                        old_param_name, &new_replacement)) {
+                    goto end_of_function;
+                }
+            }
+            if (!expr_subst(context, expr->lambda.body,
+                    old_param_name, &new_replacement)) {
+                goto end_of_function;
+            }
+        }
+    }
+
+    if (!expr_subst(context, expr->lambda.body, name, replacement)) {
+        goto end_of_function;
+    }
+
+    ret_val = true;
+
+end_of_function:
+    symbol_set_free(free_vars);
+    return ret_val;
+}
+
 static bool expr_struct_subst(Context *context, Expr *expr,
         const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_STRUCT);
@@ -512,6 +605,9 @@ bool expr_subst(Context *context, Expr *expr,
 
       case EXPR_FUNC_TYPE:
         return expr_func_type_subst(context, expr, name, replacement);
+
+      case EXPR_LAMBDA:
+        return expr_lambda_subst(context, expr, name, replacement);
 
       case EXPR_CALL:
         if (!expr_subst(context, expr->call.func, name, replacement)) {
@@ -754,6 +850,16 @@ void expr_free(Expr *expr) {
         dealloc(expr->func_type.param_names);
         break;
 
+      case EXPR_LAMBDA:
+        for (size_t i = 0; i < expr->lambda.num_params; i++) {
+            expr_free(&expr->lambda.param_types[i]);
+        }
+        dealloc(expr->lambda.param_types);
+        dealloc(expr->lambda.param_names);
+        expr_free(expr->lambda.body);
+        dealloc(expr->lambda.body);
+        break;
+
       case EXPR_CALL:
         expr_free(expr->call.func);
         dealloc(expr->call.func);
@@ -969,6 +1075,20 @@ void expr_pprint(FILE *to, const Expr *expr) {
             }
         }
         putc(']', to);
+        break;
+
+      case EXPR_LAMBDA:
+        fprintf(to, "\\(");
+        for (size_t i = 0; i < expr->lambda.num_params; i++) {
+            if (i > 0) {
+                fprintf(to, ", ");
+            }
+
+            expr_pprint(to, &expr->lambda.param_types[i]);
+            fprintf(to, " %s", expr->lambda.param_names[i]);
+        }
+        fprintf(to, ") -> ");
+        expr_pprint(to, expr->lambda.body);
         break;
 
       case EXPR_CALL:

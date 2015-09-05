@@ -262,6 +262,29 @@ end_of_function:
     return ret_val;
 }
 
+static bool type_infer_lambda(Context *context, const Expr *expr, Expr *result) {
+    assert(expr->tag == EXPR_LAMBDA);
+
+    symbol_table_enter_scope(&context->symbol_table);
+
+    for (size_t i = 0; i < expr->lambda.num_params; i++) {
+        if (type_check(context, &expr->lambda.param_types[i],
+                &literal_expr_type)) {
+            symbol_table_register_local(&context->symbol_table,
+                expr->lambda.param_names[i], expr->lambda.param_types[i]);
+        } else {
+            symbol_table_leave_scope(&context->symbol_table);
+            return false;
+        }
+    }
+
+    symbol_table_enter_scope(&context->symbol_table);
+    bool ret_val = type_infer(context, expr->lambda.body, result);
+    symbol_table_leave_scope(&context->symbol_table);
+    symbol_table_leave_scope(&context->symbol_table);
+    return ret_val;
+}
+
 static bool type_infer_call(Context *context, const Expr *expr, Expr *result) {
     assert(expr->tag == EXPR_CALL);
     Expr func_type;
@@ -605,6 +628,9 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
 
       case EXPR_FUNC_TYPE:
         return type_infer_func_type(context, expr, result);
+
+      case EXPR_LAMBDA:
+        return type_infer_lambda(context, expr, result);
 
       case EXPR_CALL:
         return type_infer_call(context, expr, result);

@@ -64,9 +64,9 @@ typedef enum {
     , EXPR_BIN_OP
     , EXPR_IFTHENELSE
 
-    // Function type and destructor. Constructor is a declaration, not an
-    // expression.
+    // Function type, constructor, and destructor.
     , EXPR_FUNC_TYPE
+    , EXPR_LAMBDA
     , EXPR_CALL
 
     // Product/Union type, constructor, and destructor.
@@ -108,6 +108,12 @@ struct Expr {
             Expr *param_types;
             const char **param_names; // Values may be NULL if params not named.
         } func_type;
+        struct {
+            size_t num_params;
+            Expr *param_types;
+            const char **param_names;
+            Expr *body;
+        } lambda;
         struct {
             Expr *func;
             size_t num_args;
