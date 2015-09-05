@@ -23,7 +23,6 @@
     /* Parser values */
     Literal literal;
     Expr expr;
-    Statement statement;
     TopLevel top_level;
     TranslationUnit unit;
 
@@ -60,14 +59,6 @@
         const char *field_name;
         Expr assign;
     } pack_init;
-
-    Block block;
-
-    struct {
-        size_t len;
-        Expr *ifs;
-        Block *thens;
-    } if_list;
 }
 
 %{
@@ -78,20 +69,12 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
     /* Reserved Words / Multicharacter symbols */
 %token TOK_TYPE     "type"
 %token TOK_VOID     "void"
-%token TOK_U8       "u8"
-%token TOK_S8       "s8"
-%token TOK_U16      "u16"
-%token TOK_S16      "s16"
-%token TOK_U32      "u32"
-%token TOK_S32      "s32"
 %token TOK_U64      "u64"
-%token TOK_S64      "s64"
 %token TOK_BOOL     "bool"
 %token TOK_TRUE     "true"
 %token TOK_FALSE    "false"
 %token TOK_STRUCT   "struct"
 %token TOK_UNION    "union"
-%token TOK_RETURN   "return"
 %token TOK_IF       "if"
 %token TOK_THEN     "then"
 %token TOK_ELSE     "else"
@@ -99,7 +82,6 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_NE       "!="
 %token TOK_LTE      "<="
 %token TOK_GTE      ">="
-%token TOK_ANDTHEN  ">>"
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -111,9 +93,6 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %type <literal> literal
 %type <expr> simple_expr postfix_expr prefix_expr add_expr relational_expr
 %type <expr> equality_expr expr
-%type <statement> statement statement_
-%type <if_list> else_if_parts
-%type <block> else_part
 %type <top_level> top_level top_level_
 %type <unit> translation_unit
 
@@ -127,8 +106,6 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %type <pack_init_list> pack_init_list pack_init_list_
 %type <pack_init> pack_init
 
-%type <block> statement_list block
-
 %%
 
 main:
@@ -139,14 +116,7 @@ main:
 literal:
       "type"        { $$.tag = LIT_TYPE;                                      }
     | "void"        { $$.tag = LIT_VOID;                                      }
-    | "u8"          { $$.tag = LIT_U8;                                        }
-    | "s8"          { $$.tag = LIT_S8;                                        }
-    | "u16"         { $$.tag = LIT_U16;                                       }
-    | "s16"         { $$.tag = LIT_S16;                                       }
-    | "u32"         { $$.tag = LIT_U32;                                       }
-    | "s32"         { $$.tag = LIT_S32;                                       }
     | "u64"         { $$.tag = LIT_U64;                                       }
-    | "s64"         { $$.tag = LIT_S64;                                       }
     | "bool"        { $$.tag = LIT_BOOL;                                      }
     | "true"        { $$.tag = LIT_BOOLEAN; $$.boolean = true;                }
     | "false"       { $$.tag = LIT_BOOLEAN; $$.boolean = false;               }
@@ -172,10 +142,6 @@ simple_expr:
         $$.union_.num_fields = $3.len;
         $$.union_.field_types = $3.types;
         $$.union_.field_names = $3.idents; }
-    | '[' statement ']' {
-        $$.tag = EXPR_STATEMENT;
-        alloc($$.statement);
-        *$$.statement = $2; }
     ;
 
 postfix_expr:
@@ -279,13 +245,6 @@ relational_expr:
         *$$.bin_op.expr1 = $1;
         alloc($$.bin_op.expr2);
         *$$.bin_op.expr2 = $3; }
-    | relational_expr ">>" add_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_ANDTHEN;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
     ;
 
 equality_expr:
@@ -310,73 +269,6 @@ expr:
       equality_expr {
         $$.location.line = @1.first_line;
         $$.location.column = @1.first_column; }
-    ;
-
-statement:
-      statement_ {
-        $$.location.line = @1.first_line;
-        $$.location.column = @1.first_column; }
-    ;
-
-statement_:
-      ';' {
-        $$.tag = STATEMENT_EMPTY; }
-    | expr ';' {
-        $$.tag = STATEMENT_EXPR;
-        $$.expr = $1; }
-    | "return" expr ';' {
-        $$.tag = STATEMENT_RETURN;
-        $$.expr = $2; }
-    | block {
-        $$.tag = STATEMENT_BLOCK;
-        $$.block = $1; }
-    | expr TOK_IDENT ';' {
-        $$.tag = STATEMENT_DECL;
-        $$.decl.type = $1;
-        $$.decl.name = $2;
-        $$.decl.is_initialized = false; }
-    | expr TOK_IDENT '=' expr ';' {
-        $$.tag = STATEMENT_DECL;
-        $$.decl.type = $1;
-        $$.decl.name = $2;
-        $$.decl.is_initialized = true;
-        $$.decl.initial_value = $4; }
-    | "if" '(' expr ')' block else_if_parts else_part {
-        $$.tag = STATEMENT_IFTHENELSE;
-        $$.ifthenelse.ifs = $6.ifs;
-        realloc_array($$.ifthenelse.ifs, $6.len + 1);
-        memmove(&$$.ifthenelse.ifs[1], &$$.ifthenelse.ifs[0],
-            $6.len * sizeof *$$.ifthenelse.ifs);
-        $$.ifthenelse.ifs[0] = $3;
-        $$.ifthenelse.thens = $6.thens;
-        realloc_array($$.ifthenelse.thens, $6.len + 1);
-        memmove(&$$.ifthenelse.thens[1], &$$.ifthenelse.thens[0],
-            $6.len * sizeof &$$.ifthenelse.thens);
-        $$.ifthenelse.thens[0] = $5;
-        $$.ifthenelse.else_ = $7;
-        $$.ifthenelse.num_ifs = $6.len + 1; }
-    ;
-
-else_if_parts:
-      %empty {
-        $$.len = 0;
-        $$.ifs = NULL;
-        $$.thens = NULL; }
-    | else_if_parts "else" "if" '(' expr ')' block {
-        $$ = $1;
-        realloc_array($$.ifs, $$.len + 1);
-        $$.ifs[$$.len] = $5;
-        realloc_array($$.thens, $$.len + 1);
-        $$.thens[$$.len] = $7;
-        $$.len += 1; }
-    ;
-
-else_part:
-      %empty {
-        $$.num_statements = 0;
-        $$.statements = NULL; }
-    | "else" block {
-        $$ = $2; }
     ;
 
 top_level:
@@ -505,22 +397,6 @@ pack_init:
         $$.assign = $4; }
     ;
 
-block:
-      '{' statement_list '}' {
-        $$ = $2; }
-    ;
-
-statement_list:
-      %empty {
-        $$.num_statements = 0;
-        $$.statements = NULL; }
-    | statement_list statement {
-        $$ = $1;
-        realloc_array($$.statements, $$.num_statements + 1);
-        $$.statements[$$.num_statements] = $2;
-        $$.num_statements += 1; }
-    ;
-
 %%
 
 static int token_stream_pop_char(TokenStream *stream) {
@@ -596,20 +472,12 @@ start_of_function:;
         if (false) {}
         check_is_reserved(type,     TOK_TYPE)
         check_is_reserved(void,     TOK_VOID)
-        check_is_reserved(u8,       TOK_U8)
-        check_is_reserved(s8,       TOK_S8)
-        check_is_reserved(u16,      TOK_U16)
-        check_is_reserved(s16,      TOK_S16)
-        check_is_reserved(u32,      TOK_U32)
-        check_is_reserved(s32,      TOK_S32)
         check_is_reserved(u64,      TOK_U64)
-        check_is_reserved(s64,      TOK_S64)
         check_is_reserved(bool,     TOK_BOOL)
         check_is_reserved(true,     TOK_TRUE)
         check_is_reserved(false,    TOK_FALSE)
         check_is_reserved(struct,   TOK_STRUCT)
         check_is_reserved(union,    TOK_UNION)
-        check_is_reserved(return,   TOK_RETURN)
         check_is_reserved(if,       TOK_IF)
         check_is_reserved(then,     TOK_THEN)
         check_is_reserved(else,     TOK_ELSE)
@@ -669,8 +537,6 @@ start_of_function:;
         c = token_stream_pop_char(stream);
         if (c == '=') {
             return TOK_GTE;
-        } else if (c == '>') {
-            return TOK_ANDTHEN;
         } else {
             token_stream_push_char(stream, c);
             return '>';

@@ -109,10 +109,7 @@ static bool type_infer_literal(Context *context, const Literal *literal,
     switch (literal->tag) {
       case LIT_TYPE:
       case LIT_VOID:
-      case LIT_U8:      case LIT_S8:
-      case LIT_U16:     case LIT_S16:
-      case LIT_U32:     case LIT_S32:
-      case LIT_U64:     case LIT_S64:
+      case LIT_U64:
       case LIT_BOOL:
         *result = literal_expr_type;
         return true;
@@ -120,7 +117,7 @@ static bool type_infer_literal(Context *context, const Literal *literal,
       case LIT_INTEGRAL:
         *result = (Expr){
               .tag = EXPR_LITERAL
-            , .literal = (Literal){.tag = LIT_U64}
+            , .literal.tag = LIT_U64
         };
         return true;
 
@@ -154,10 +151,7 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
 
     bool is_integral = false, is_boolean = false, is_type = false;
     switch (op_type.literal.tag) {
-      case LIT_U8:      case LIT_S8:
-      case LIT_U16:     case LIT_S16:
-      case LIT_U32:     case LIT_S32:
-      case LIT_U64:     case LIT_S64:
+      case LIT_U64:
         is_integral = true;
         break;
 
@@ -212,17 +206,6 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
         } else {
             fprintf(stderr, "Additive expressions only operate on integral "
                 "types.\n");
-            expr_free(&op_type);
-            return false;
-        }
-
-      case BIN_OP_ANDTHEN:
-        if (is_type) {
-            *result = literal_expr_type;
-            expr_free(&op_type);
-            return true;
-        } else {
-            fprintf(stderr, "Sequencing operator only operates on types.\n");
             expr_free(&op_type);
             return false;
         }
@@ -695,9 +678,6 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
         *result = expr_copy(temp->pointer);
         expr_free(temp);
         return true;
-
-      case EXPR_STATEMENT:
-        return type_infer_statement(context, expr->statement, result);
     }
 }
 
@@ -793,12 +773,6 @@ static bool type_eval_bin_op(Context *context, const Expr *type, Expr *result) {
             *result = expr_copy(type);
             return true;
         }
-
-      case BIN_OP_ANDTHEN:
-        expr_free(reduced_expr1);
-        expr_free(reduced_expr2);
-        *result = expr_copy(type);
-        return true;
     }
 }
 
@@ -911,101 +885,9 @@ bool type_eval(Context *context, const Expr *type, Expr *result) {
       case EXPR_POINTER:
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
-      case EXPR_STATEMENT:
         *result = expr_copy(type);
         return true;
     }
-}
-
-bool type_infer_statement(Context *context, const Statement *statement,
-        Expr *result) {
-    Expr temp[1];
-    Expr temp2[1];
-
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        *result = literal_expr_void;
-        return true;
-
-      case STATEMENT_EXPR:
-        if (!type_infer(context, &statement->expr, temp)) {
-            return false;
-        }
-        expr_free(temp);
-        *result = literal_expr_void;
-        return true;
-
-      case STATEMENT_RETURN:
-        return type_infer(context, &statement->expr, result);
-
-      case STATEMENT_BLOCK:
-        return type_infer_block(context, &statement->block, result);
-
-      case STATEMENT_DECL:
-        if (!type_check(context, &statement->decl.type, &literal_expr_type)) {
-            return false;
-        }
-        if (statement->decl.is_initialized && !type_check(context,
-                &statement->decl.initial_value, &statement->decl.type)) {
-            return false;
-        }
-        symbol_table_register_local(&context->symbol_table,
-            statement->decl.name, statement->decl.type);
-        *result = literal_expr_void;
-        return true;
-
-      case STATEMENT_IFTHENELSE:
-        if (!type_infer_block(context, &statement->ifthenelse.else_, result)) {
-            return false;
-        }
-        for (size_t i_ = 0; i_ < statement->ifthenelse.num_ifs; i_++) {
-            size_t i = statement->ifthenelse.num_ifs - i_ - 1;
-
-            if (type_infer_block(context, &statement->ifthenelse.thens[i],
-                    temp)) {
-                temp2->tag = EXPR_IFTHENELSE;
-                alloc(temp2->ifthenelse.predicate);
-                *temp2->ifthenelse.predicate =
-                    expr_copy(&statement->ifthenelse.ifs[i]);
-                alloc(temp2->ifthenelse.then_);
-                *temp2->ifthenelse.then_ = *temp;
-                alloc(temp2->ifthenelse.else_);
-                *temp2->ifthenelse.else_ = *result;
-                *result = *temp2;
-            } else {
-                expr_free(result);
-                return false;
-            }
-        }
-        return true;
-    }
-}
-
-bool type_infer_block(Context *context, const Block *block, Expr *result) {
-    Expr temp[1];
-    Expr temp2[1];
-
-    symbol_table_enter_scope(&context->symbol_table);
-    *result = literal_expr_void;
-
-    for (size_t i = 0; i < block->num_statements; i++) {
-        if (type_infer_statement(context, &block->statements[i], temp)) {
-            temp2->tag = EXPR_BIN_OP;
-            temp2->bin_op.op = BIN_OP_ANDTHEN;
-            alloc(temp2->bin_op.expr1);
-            *temp2->bin_op.expr1 = *result;
-            alloc(temp2->bin_op.expr2);
-            *temp2->bin_op.expr2 = *temp;
-            *result = *temp2;
-        } else {
-            symbol_table_leave_scope(&context->symbol_table);
-            expr_free(result);
-            return false;
-        }
-    }
-
-    symbol_table_leave_scope(&context->symbol_table);
-    return true;
 }
 
 bool type_check_top_level(Context *context, const TopLevel *top_level) {

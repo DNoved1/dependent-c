@@ -8,7 +8,6 @@
 
 typedef struct Literal          Literal;
 typedef struct Expr             Expr;
-typedef struct Statement        Statement;
 typedef struct Block            Block;
 typedef struct TopLevel         TopLevel;
 typedef struct TranslationUnit  TranslationUnit;
@@ -28,10 +27,7 @@ typedef enum {
       LIT_TYPE
     // Types representing integrals with a certain number of bits.
     , LIT_VOID
-    , LIT_U8,       LIT_S8
-    , LIT_U16,      LIT_S16
-    , LIT_U32,      LIT_S32
-    , LIT_U64,      LIT_S64
+    , LIT_U64
     , LIT_BOOL
     // Literal integers
     , LIT_INTEGRAL
@@ -57,7 +53,6 @@ typedef enum {
     , BIN_OP_GTE
     , BIN_OP_ADD
     , BIN_OP_SUB
-    , BIN_OP_ANDTHEN
 } BinaryOp;
 
 typedef enum {
@@ -82,9 +77,6 @@ typedef enum {
     , EXPR_POINTER
     , EXPR_REFERENCE
     , EXPR_DEREFERENCE
-
-    // Statements viewed as expressions
-    , EXPR_STATEMENT
 } ExprTag;
 
 struct Expr {
@@ -146,8 +138,6 @@ struct Expr {
 
         // Same field for reference and dereference
         Expr *pointer;
-
-        Statement *statement;
     };
 };
 
@@ -184,59 +174,6 @@ bool expr_equal(const Expr *x, const Expr *y);
 
 /* Calculate the set of free variables in an expression. */
 void expr_free_vars(const Expr *expr, SymbolSet *set);
-
-/***** Statements ************************************************************/
-struct Block {
-    size_t num_statements;
-    Statement *statements;
-};
-
-typedef enum {
-      STATEMENT_EMPTY
-    , STATEMENT_EXPR
-    , STATEMENT_RETURN
-    , STATEMENT_BLOCK
-    , STATEMENT_DECL
-    , STATEMENT_IFTHENELSE
-} StatementTag;
-
-struct Statement {
-    LocationInfo location;
-
-    StatementTag tag;
-    union {
-        Expr expr;
-
-        Block block;
-
-        struct {
-            Expr type;
-            const char *name;
-            bool is_initialized;
-            Expr initial_value;
-        } decl;
-
-        struct {
-            size_t num_ifs;
-            Expr *ifs;
-            Block *thens;
-            Block else_;
-        } ifthenelse;
-    };
-};
-
-void statement_free(Statement *statement);
-Statement statement_copy(const Statement *statement);
-
-void statement_pprint(FILE *to, int nesting, const Statement *statement);
-void statement_free_vars(const Statement *statement, SymbolSet *free_vars);
-
-void block_free(Block *block);
-Block block_copy(const Block *block);
-
-// Note: does not print any braces
-void block_pprint(FILE *to, int nesting, const Block *block);
-void block_free_vars(const Block *block, SymbolSet *free_vars);
 
 /***** Top-Level Definitions *************************************************/
 typedef enum {
@@ -279,12 +216,6 @@ void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
 
 /* Substitute a variable in an expression for an expression. */
 bool expr_subst(Context *context, Expr *expr,
-    const char *name, const Expr *replacement);
-
-bool statement_subst(Context *context, Statement *statement,
-    const char *name, const Expr *replacement);
-
-bool block_subst(Context *context, Block *block,
     const char *name, const Expr *replacement);
 
 #endif /* DEPENDENT_C_AST */

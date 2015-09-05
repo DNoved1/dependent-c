@@ -18,14 +18,7 @@ static bool literal_equal(Literal x, Literal y) {
     switch (x.tag) {
       case LIT_TYPE:
       case LIT_VOID:
-      case LIT_U8:
-      case LIT_S8:
-      case LIT_U16:
-      case LIT_S16:
-      case LIT_U32:
-      case LIT_S32:
       case LIT_U64:
-      case LIT_S64:
       case LIT_BOOL:
         return true;
 
@@ -150,10 +143,6 @@ bool expr_equal(const Expr *x, const Expr *y) {
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
         return expr_equal(x->pointer, y->pointer);
-
-      case EXPR_STATEMENT:
-        // TODO
-        return false;
     }
 }
 
@@ -161,10 +150,7 @@ static Literal literal_copy(const Literal *x) {
     switch (x->tag) {
       case LIT_TYPE:
       case LIT_VOID:
-      case LIT_U8:      case LIT_S8:
-      case LIT_U16:     case LIT_S16:
-      case LIT_U32:     case LIT_S32:
-      case LIT_U64:     case LIT_S64:
+      case LIT_U64:
       case LIT_BOOL:
       case LIT_INTEGRAL:
       case LIT_BOOLEAN:
@@ -279,11 +265,6 @@ Expr expr_copy(const Expr *x) {
         alloc(y.pointer);
         *y.pointer = expr_copy(x->pointer);
         break;
-
-      case EXPR_STATEMENT:
-        alloc(y.statement);
-        *y.statement = statement_copy(x->statement);
-        break;
     }
 
     return y;
@@ -393,9 +374,6 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
       case EXPR_DEREFERENCE:
         expr_free_vars(expr->pointer, free_vars);
         break;
-
-      case EXPR_STATEMENT:
-        statement_free_vars(expr->statement, free_vars);
     }
 }
 
@@ -644,179 +622,7 @@ bool expr_subst(Context *context, Expr *expr,
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
         return expr_subst(context, expr->pointer, name, replacement);
-
-      case EXPR_STATEMENT:
-        return statement_subst(context, expr->statement, name, replacement);
     }
-}
-
-/***** Statement Management **************************************************/
-Statement statement_copy(const Statement *statement) {
-    Statement result = {.tag = statement->tag, .location = statement->location};
-
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        break;
-
-      case STATEMENT_EXPR:
-      case STATEMENT_RETURN:
-        result.expr = expr_copy(&statement->expr);
-        break;
-
-      case STATEMENT_BLOCK:
-        result.block = block_copy(&statement->block);
-        break;
-
-      case STATEMENT_DECL:
-        result.decl.type = expr_copy(&statement->decl.type);
-        result.decl.name = statement->decl.name;
-        result.decl.is_initialized = statement->decl.is_initialized;
-        if (result.decl.is_initialized) {
-            result.decl.initial_value =
-                expr_copy(&statement->decl.initial_value);
-        }
-        break;
-
-      case STATEMENT_IFTHENELSE:
-        result.ifthenelse.num_ifs = statement->ifthenelse.num_ifs;
-        alloc_array(result.ifthenelse.ifs, result.ifthenelse.num_ifs);
-        for (size_t i = 0; i < result.ifthenelse.num_ifs; i++) {
-            result.ifthenelse.ifs[i] = expr_copy(&statement->ifthenelse.ifs[i]);
-        }
-        alloc_array(result.ifthenelse.thens, result.ifthenelse.num_ifs);
-        for (size_t i = 0; i < result.ifthenelse.num_ifs; i++) {
-            result.ifthenelse.thens[i] =
-                block_copy(&statement->ifthenelse.thens[i]);
-        }
-        result.ifthenelse.else_ = block_copy(&statement->ifthenelse.else_);
-        break;
-    }
-
-    return result;
-}
-
-void statement_free_vars(const Statement *statement, SymbolSet *free_vars) {
-    SymbolSet free_vars_temp[1];
-
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        *free_vars = symbol_set_empty();
-        break;
-
-      case STATEMENT_EXPR:
-      case STATEMENT_RETURN:
-        expr_free_vars(&statement->expr, free_vars);
-        break;
-
-      case STATEMENT_BLOCK:
-        block_free_vars(&statement->block, free_vars);
-        break;
-
-      case STATEMENT_DECL:
-        expr_free_vars(&statement->decl.type, free_vars);
-        if (statement->decl.is_initialized) {
-            expr_free_vars(&statement->decl.initial_value, free_vars_temp);
-            symbol_set_union(free_vars, free_vars_temp);
-        }
-        break;
-
-      case STATEMENT_IFTHENELSE:
-        block_free_vars(&statement->ifthenelse.else_, free_vars);
-        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
-            expr_free_vars(&statement->ifthenelse.ifs[i], free_vars_temp);
-            symbol_set_union(free_vars, free_vars_temp);
-            block_free_vars(&statement->ifthenelse.thens[i], free_vars);
-            symbol_set_union(free_vars, free_vars_temp);
-        }
-        break;
-    }
-}
-
-bool statement_subst(Context *context, Statement *statement,
-        const char *name, const Expr *replacement) {
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        return true;
-
-      case STATEMENT_EXPR:
-      case STATEMENT_RETURN:
-        return expr_subst(context, &statement->expr, name, replacement);
-
-      case STATEMENT_BLOCK:
-        return block_subst(context, &statement->block, name, replacement);
-
-      case STATEMENT_DECL:
-        if (!expr_subst(context, &statement->decl.type, name, replacement)) {
-            return false;
-        }
-        if (statement->decl.is_initialized) {
-            return expr_subst(context, &statement->decl.initial_value,
-                name, replacement);
-        } else {
-            return true;
-        }
-
-      case STATEMENT_IFTHENELSE:
-        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
-            if (!expr_subst(context, &statement->ifthenelse.ifs[i],
-                        name, replacement)
-                    || !block_subst(context, &statement->ifthenelse.thens[i],
-                        name, replacement)) {
-                return false;
-            }
-        }
-        return block_subst(context, &statement->ifthenelse.else_,
-            name, replacement);
-    }
-}
-
-Block block_copy(const Block *block) {
-    Block result = {.num_statements = block->num_statements};
-    alloc_array(result.statements, result.num_statements);
-
-    for (size_t i = 0; i < result.num_statements; i++) {
-        result.statements[i] = statement_copy(&block->statements[i]);
-    }
-
-    return result;
-}
-
-void block_free_vars(const Block *block, SymbolSet *free_vars) {
-    SymbolSet free_vars_temp[1];
-    *free_vars = symbol_set_empty();
-
-    for (size_t i = 0; i < block->num_statements; i++) {
-        const Statement *statement = &block->statements[
-            block->num_statements - i - 1];
-
-        switch (statement->tag) {
-          case STATEMENT_DECL:
-            symbol_set_delete(free_vars, statement->decl.name);
-            break;
-
-          case STATEMENT_EMPTY:
-          case STATEMENT_EXPR:
-          case STATEMENT_RETURN:
-          case STATEMENT_BLOCK:
-          case STATEMENT_IFTHENELSE:
-            break;
-        }
-
-        statement_free_vars(statement, free_vars_temp);
-        symbol_set_union(free_vars, free_vars_temp);
-    }
-}
-
-bool block_subst(Context *context, Block *block,
-        const char *name, const Expr *replacement) {
-    for (size_t i = 0; i < block->num_statements; i++) {
-        if (!statement_subst(context, &block->statements[i],
-                name, replacement)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 /***** Freeing ast nodes *****************************************************/
@@ -908,55 +714,8 @@ void expr_free(Expr *expr) {
         expr_free(expr->pointer);
         dealloc(expr->pointer);
         break;
-
-      case EXPR_STATEMENT:
-        statement_free(expr->statement);
-        dealloc(expr->statement);
-        break;
     }
     memset(expr, 0, sizeof *expr);
-}
-
-void statement_free(Statement *statement) {
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        break;
-
-      case STATEMENT_EXPR:
-      case STATEMENT_RETURN:
-        expr_free(&statement->expr);
-        break;
-
-      case STATEMENT_BLOCK:
-        block_free(&statement->block);
-        break;
-
-      case STATEMENT_DECL:
-        expr_free(&statement->decl.type);
-        if (statement->decl.is_initialized) {
-            expr_free(&statement->decl.initial_value);
-        }
-        break;
-
-      case STATEMENT_IFTHENELSE:
-        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
-            expr_free(&statement->ifthenelse.ifs[i]);
-            block_free(&statement->ifthenelse.thens[i]);
-        }
-        dealloc(statement->ifthenelse.ifs);
-        dealloc(statement->ifthenelse.thens);
-        block_free(&statement->ifthenelse.else_);
-        break;
-    }
-    memset(statement, 0, sizeof *statement);
-}
-
-void block_free(Block *block) {
-    for (size_t i = 0; i < block->num_statements; i++) {
-        statement_free(&block->statements[i]);
-    }
-    dealloc(block->statements);
-    memset(block, 0, sizeof *block);
 }
 
 void top_level_free(TopLevel *top_level) {
@@ -983,12 +742,6 @@ void translation_unit_free(TranslationUnit *unit) {
 }
 
 /***** Pretty-printing ast nodes *********************************************/
-static void print_indentation_whitespace(FILE *to, int nesting) {
-    for (int i = 0; i < nesting; i++) {
-        fprintf(to, "    ");
-    }
-}
-
 void location_pprint(const char *file, const LocationInfo *info) {
     fprintf(stderr, "    At file %s, line %u, column %u.\n",
         file, info->line, info->column);
@@ -999,14 +752,7 @@ static void literal_pprint(FILE *to, const Literal *literal) {
     switch (literal->tag) {
       tag_to_string(LIT_TYPE, "type")
       tag_to_string(LIT_VOID, "void")
-      tag_to_string(LIT_U8, "u8")
-      tag_to_string(LIT_S8, "s8")
-      tag_to_string(LIT_U16, "u16")
-      tag_to_string(LIT_S16, "s16")
-      tag_to_string(LIT_U32, "u32")
-      tag_to_string(LIT_S32, "s32")
       tag_to_string(LIT_U64, "u64")
-      tag_to_string(LIT_S64, "s64")
       tag_to_string(LIT_BOOL, "bool")
 
       case LIT_INTEGRAL:
@@ -1029,7 +775,6 @@ static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
       tag_to_string(BIN_OP_GTE,     " >= ")
       tag_to_string(BIN_OP_ADD,     " + ")
       tag_to_string(BIN_OP_SUB,     " - ")
-      tag_to_string(BIN_OP_ANDTHEN, " >> ")
     }
 }
 #undef tag_to_string
@@ -1163,72 +908,6 @@ void expr_pprint(FILE *to, const Expr *expr) {
         putc('*', to);
         expr_pprint_(to, expr->pointer);
         break;
-
-      case EXPR_STATEMENT:
-        putc('[', to);
-        statement_pprint(to, 0, expr->statement);
-        putc(']', to);
-        break;
-    }
-}
-
-void statement_pprint(FILE *to, int nesting, const Statement *statement) {
-    print_indentation_whitespace(to, nesting);
-
-    switch (statement->tag) {
-      case STATEMENT_EMPTY:
-        fprintf(to, ";\n");
-        break;
-
-      case STATEMENT_RETURN:
-        fprintf(to, "return ");
-        // Fallthrough
-
-      case STATEMENT_EXPR:
-        expr_pprint(to, &statement->expr);
-        fprintf(to, ";\n");
-        break;
-
-      case STATEMENT_BLOCK:
-        fprintf(to, "{\n");
-        block_pprint(to, nesting + 1, &statement->block);
-        print_indentation_whitespace(to, nesting);
-        fprintf(to, "}\n");
-        break;
-
-      case STATEMENT_DECL:
-        expr_pprint(to, &statement->decl.type);
-        fprintf(to, " %s", statement->decl.name);
-        if (statement->decl.is_initialized) {
-            fprintf(to, " = ");
-            expr_pprint(to, &statement->decl.initial_value);
-        }
-        fprintf(to, ";\n");
-        break;
-
-      case STATEMENT_IFTHENELSE:
-        for (size_t i = 0; i < statement->ifthenelse.num_ifs; i++) {
-            if (i != 0) {
-                print_indentation_whitespace(to, nesting);
-                fprintf(to, "} else ");
-            }
-            fprintf(to, "if (");
-            expr_pprint(to, &statement->ifthenelse.ifs[i]);
-            fprintf(to, ") {\n");
-            block_pprint(to, nesting + 1, &statement->ifthenelse.thens[i]);
-        }
-        print_indentation_whitespace(to, nesting);
-        fprintf(to, "} else {\n");
-        block_pprint(to, nesting + 1, &statement->ifthenelse.else_);
-        print_indentation_whitespace(to, nesting);
-        fprintf(to, "}\n");
-        break;
-    }
-}
-
-void block_pprint(FILE *to, int nesting, const Block *block) {
-    for (size_t i = 0; i < block->num_statements; i++) {
-        statement_pprint(to, nesting, &block->statements[i]);
     }
 }
 

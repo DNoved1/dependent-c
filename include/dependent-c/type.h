@@ -19,10 +19,6 @@ bool type_infer(Context *context, const Expr *expr, Expr *result);
 bool type_equal(Context *context, const Expr *type1, const Expr *type2);
 bool type_eval(Context *context, const Expr *type, Expr *result);
 
-bool type_infer_statement(Context *context, const Statement *statement,
-    Expr *result);
-bool type_infer_block(Context *context, const Block *block, Expr *result);
-
 bool type_check_top_level(Context *context, const TopLevel *top_level);
 
 #endif /* DEPENDENT_C_TYPE_H */
