@@ -8,6 +8,16 @@
 #include "dependent-c/general.h"
 #include "dependent-c/lex.h"
 #include "dependent-c/memory.h"
+
+#define PARSER_CONSTRUCT_BIN_OP(__op__) \
+    do { \
+        yyval.expr.tag = EXPR_BIN_OP; \
+        yyval.expr.bin_op.op = __op__; \
+        alloc(yyval.expr.bin_op.expr1); \
+        *yyval.expr.bin_op.expr1 = yyvsp[-2].expr; \
+        alloc(yyval.expr.bin_op.expr2); \
+        *yyval.expr.bin_op.expr2 = yyvsp[0].expr; \
+    } while (0)
 %}
 
 %define api.pure full
@@ -205,80 +215,35 @@ prefix_expr:
 add_expr:
       prefix_expr
     | add_expr '+' prefix_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_ADD;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_ADD); }
     | add_expr '-' prefix_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_SUB;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_SUB); }
     ;
 
 relational_expr:
       add_expr
     | relational_expr '<' add_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_LT;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_LT); }
     | relational_expr "<=" add_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_LTE;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_LTE); }
     | relational_expr '>' add_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_GT;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_GT); }
     | relational_expr ">=" add_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_GTE;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_GTE); }
     ;
 
 equality_expr:
       relational_expr
     | equality_expr "==" relational_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_EQ;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_EQ); }
     | equality_expr "!=" relational_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_NE;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_NE); }
     ;
 
 identity_expr:
       equality_expr
     | equality_expr '=' equality_expr {
-        $$.tag = EXPR_BIN_OP;
-        $$.bin_op.op = BIN_OP_ID;
-        alloc($$.bin_op.expr1);
-        *$$.bin_op.expr1 = $1;
-        alloc($$.bin_op.expr2);
-        *$$.bin_op.expr2 = $3; }
+        PARSER_CONSTRUCT_BIN_OP(BIN_OP_ID); }
     ;
 
 expr:
