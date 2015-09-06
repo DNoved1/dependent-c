@@ -139,6 +139,7 @@ bool expr_equal(const Expr *x, const Expr *y) {
         }
         return true;
 
+      case EXPR_REFLEXIVE:
       case EXPR_POINTER:
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
@@ -259,6 +260,7 @@ Expr expr_copy(const Expr *x) {
         y.member.field = x->member.field;
         break;
 
+      case EXPR_REFLEXIVE:
       case EXPR_POINTER:
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
@@ -369,6 +371,7 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
         expr_free_vars(expr->member.record, free_vars);
         break;
 
+      case EXPR_REFLEXIVE:
       case EXPR_POINTER:
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
@@ -618,6 +621,7 @@ bool expr_subst(Context *context, Expr *expr,
       case EXPR_MEMBER:
         return expr_subst(context, expr->member.record, name, replacement);
 
+      case EXPR_REFLEXIVE:
       case EXPR_POINTER:
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
@@ -708,6 +712,7 @@ void expr_free(Expr *expr) {
         dealloc(expr->member.record);
         break;
 
+      case EXPR_REFLEXIVE:
       case EXPR_POINTER:
       case EXPR_REFERENCE:
       case EXPR_DEREFERENCE:
@@ -767,6 +772,7 @@ static void literal_pprint(FILE *to, const Literal *literal) {
 
 static void bin_op_pprint(FILE *to, BinaryOp bin_op) {
     switch (bin_op) {
+      tag_to_string(BIN_OP_ID,      " = ")
       tag_to_string(BIN_OP_EQ,      " == ")
       tag_to_string(BIN_OP_NE,      " != ")
       tag_to_string(BIN_OP_LT,      " < ")
@@ -811,6 +817,12 @@ void expr_pprint(FILE *to, const Expr *expr) {
         expr_pprint(to, expr->ifthenelse.then_);
         fprintf(to, " else ");
         expr_pprint(to, expr->ifthenelse.else_);
+        break;
+
+      case EXPR_REFLEXIVE:
+        fprintf(to, "reflexive(");
+        expr_pprint(to, expr->pointer);
+        putc(')', to);
         break;
 
       case EXPR_FUNC_TYPE:

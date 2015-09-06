@@ -78,6 +78,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token TOK_IF       "if"
 %token TOK_THEN     "then"
 %token TOK_ELSE     "else"
+%token TOK_REFLEXIVE "reflexive"
 %token TOK_EQ       "=="
 %token TOK_NE       "!="
 %token TOK_LTE      "<="
@@ -92,7 +93,7 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
     /* Result types of each rule */
 %type <literal> literal
 %type <expr> simple_expr postfix_expr prefix_expr add_expr relational_expr
-%type <expr> equality_expr expr
+%type <expr> equality_expr identity_expr expr
 %type <top_level> top_level top_level_
 %type <unit> translation_unit
 
@@ -161,6 +162,10 @@ postfix_expr:
         *$$.call.func = $1;
         $$.call.num_args = $3.len;
         $$.call.args = $3.args; }
+    | "reflexive" '(' expr ')' {
+        $$.tag = EXPR_REFLEXIVE;
+        alloc($$.pointer);
+        *$$.pointer = $3; }
     | postfix_expr '[' param_list ']' {
         $$.tag = EXPR_FUNC_TYPE;
         alloc($$.func_type.ret_type);
@@ -265,8 +270,19 @@ equality_expr:
         *$$.bin_op.expr2 = $3; }
     ;
 
+identity_expr:
+      equality_expr
+    | equality_expr '=' equality_expr {
+        $$.tag = EXPR_BIN_OP;
+        $$.bin_op.op = BIN_OP_ID;
+        alloc($$.bin_op.expr1);
+        *$$.bin_op.expr1 = $1;
+        alloc($$.bin_op.expr2);
+        *$$.bin_op.expr2 = $3; }
+    ;
+
 expr:
-      equality_expr {
+      identity_expr {
         $$.location.line = @1.first_line;
         $$.location.column = @1.first_column; }
     ;
@@ -481,6 +497,7 @@ start_of_function:;
         check_is_reserved(if,       TOK_IF)
         check_is_reserved(then,     TOK_THEN)
         check_is_reserved(else,     TOK_ELSE)
+        check_is_reserved(reflexive, TOK_REFLEXIVE)
         else {
             const char *interned_ident = symbol_intern(&context->interns, ident);
             dealloc(ident);

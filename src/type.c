@@ -131,6 +131,12 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
     assert(expr->tag == EXPR_BIN_OP);
     Expr op_type;
 
+    // Since we have heterogeneous equality, this always creates a type.
+    if (expr->bin_op.op == BIN_OP_ID) {
+        *result = literal_expr_type;
+        return true;
+    }
+
     if (!type_infer(context, expr->bin_op.expr1, &op_type)) {
         return false;
     }
@@ -170,6 +176,8 @@ static bool type_infer_bin_op(Context *context, const Expr *expr, Expr *result) 
     }
 
     switch (expr->bin_op.op) {
+      case BIN_OP_ID: assert(false);
+
       case BIN_OP_EQ:
       case BIN_OP_NE:
         if (is_integral || is_boolean) {
@@ -615,6 +623,18 @@ bool type_infer(Context *context, const Expr *expr, Expr *result) {
         *result->ifthenelse.else_ = *temp2;
         return true;
 
+      case EXPR_REFLEXIVE:
+        if (!type_infer(context, expr->pointer, temp)) {
+            return false;
+        }
+        result->tag = EXPR_BIN_OP;
+        result->bin_op.op = BIN_OP_ID;
+        alloc(result->bin_op.expr1);
+        alloc(result->bin_op.expr2);
+        *result->bin_op.expr1 = expr_copy(temp);
+        *result->bin_op.expr2 = *temp;
+        return true;
+
       case EXPR_FUNC_TYPE:
         return type_infer_func_type(context, expr, result);
 
@@ -721,6 +741,12 @@ static bool type_eval_bin_op(Context *context, const Expr *type, Expr *result) {
     }
 
     switch (type->bin_op.op) {
+      case BIN_OP_ID:
+        expr_free(reduced_expr1);
+        expr_free(reduced_expr2);
+        *result = expr_copy(type);
+        return true;
+
       case BIN_OP_EQ:
         if (reduced_expr1->tag == EXPR_LITERAL
                 && reduced_expr1->literal.tag == LIT_INTEGRAL
@@ -869,6 +895,10 @@ bool type_eval(Context *context, const Expr *type, Expr *result) {
 
       case EXPR_IFTHENELSE:
         return type_eval_ifthenelse(context, type, result);
+
+      case EXPR_REFLEXIVE:
+        *result = expr_copy(type);
+        return true;
 
       case EXPR_FUNC_TYPE:
       case EXPR_LAMBDA:

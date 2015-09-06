@@ -45,7 +45,10 @@ struct Literal {
 
 /***** Expressions ***********************************************************/
 typedef enum {
-      BIN_OP_EQ
+    // For creating the identity type. Is heterogeneous.
+      BIN_OP_ID
+
+    , BIN_OP_EQ
     , BIN_OP_NE
     , BIN_OP_LT
     , BIN_OP_LTE
@@ -61,6 +64,7 @@ typedef enum {
     , EXPR_IDENT
     , EXPR_BIN_OP
     , EXPR_IFTHENELSE
+    , EXPR_REFLEXIVE
 
     // Function type, constructor, and destructor.
     , EXPR_FUNC_TYPE
@@ -136,7 +140,7 @@ struct Expr {
             const char *field;
         } member;
 
-        // Same field for reference and dereference
+        // Same field for reference, dereference, and reflexive
         Expr *pointer;
     };
 };
