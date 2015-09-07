@@ -222,4 +222,32 @@ void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
 bool expr_subst(Context *context, Expr *expr,
     const char *name, const Expr *replacement);
 
+/***** Specializations of printf *********************************************/
+
+#define ewrap(...) \
+    ((const void*[]){__VA_ARGS__})
+
+#if __GNUC__
+__attribute__((__format__ (__printf__, 2, 4)))
+#endif
+
+/* 'e' for extended.
+ *
+ * Prints a formatted string in the same manner as the printf family of
+ * functions, except some additional escapes are permitted. These are:
+ *
+ * $$ - print '$'.
+ * $e - print an expression.
+ * $(e - print an expression, parenthesized if it is complex (eg `1 + 2` would
+ *       be parenthesized, but `3` would not).
+ *
+ * Arguments to these additional escapes should be passed through an array
+ * of pointers rather than directly as arguments. For example:
+ *
+ * Expr expr1 = expr_literal_type;
+ * Expr expr2 = expr_literal_bool;
+ * efprintf(stderr, "($e) does not equal ($e).\n", (void*[]){&expr1, &expr2});
+ */
+void efprintf(FILE *file, const char *format, const void *eargs[], ...);
+
 #endif /* DEPENDENT_C_AST */

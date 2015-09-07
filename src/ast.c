@@ -801,7 +801,7 @@ void expr_pprint(FILE *to, const Expr *expr) {
         break;
 
       case EXPR_IDENT:
-        fputs(expr->ident, to);
+        fprintf(to, "%s", expr->ident);
         break;
 
       case EXPR_BIN_OP:
@@ -811,31 +811,28 @@ void expr_pprint(FILE *to, const Expr *expr) {
         break;
 
       case EXPR_IFTHENELSE:
-        fprintf(to, "if ");
-        expr_pprint(to, expr->ifthenelse.predicate);
-        fprintf(to, " then ");
-        expr_pprint(to, expr->ifthenelse.then_);
-        fprintf(to, " else ");
-        expr_pprint(to, expr->ifthenelse.else_);
+        efprintf(to, "if $e then $e else $e", ewrap(
+            expr->ifthenelse.predicate,
+            expr->ifthenelse.then_,
+            expr->ifthenelse.else_));
         break;
 
       case EXPR_REFLEXIVE:
-        fprintf(to, "reflexive(");
-        expr_pprint(to, expr->pointer);
-        putc(')', to);
+        efprintf(to, "reflexive($e)", ewrap(expr->pointer));
         break;
 
       case EXPR_FUNC_TYPE:
-        expr_pprint_(to, expr->func_type.ret_type);
-        putc('[', to);
+        efprintf(to, "$e[", ewrap(expr->func_type.ret_type));
         for (size_t i = 0; i < expr->func_type.num_params; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, &expr->func_type.param_types[i]);
-            if (expr->func_type.param_names[i] != NULL) {
-                fprintf(to, " %s", expr->func_type.param_names[i]);
+            if (expr->func_type.param_names[i] == NULL) {
+                efprintf(to, "$e", ewrap(&expr->func_type.param_types[i]));
+            } else {
+                efprintf(to, "$e %s", ewrap(&expr->func_type.param_types[i]),
+                    expr->func_type.param_names[i]);
             }
         }
         putc(']', to);
@@ -848,16 +845,14 @@ void expr_pprint(FILE *to, const Expr *expr) {
                 fprintf(to, ", ");
             }
 
-            expr_pprint(to, &expr->lambda.param_types[i]);
-            fprintf(to, " %s", expr->lambda.param_names[i]);
+            efprintf(to, "$e %s", ewrap(&expr->lambda.param_types[i]),
+                expr->lambda.param_names[i]);
         }
-        fprintf(to, ") -> ");
-        expr_pprint(to, expr->lambda.body);
+        efprintf(to, ") -> $e", ewrap(expr->lambda.body));
         break;
 
       case EXPR_CALL:
-        expr_pprint_(to, expr->call.func);
-        putc('(', to);
+        efprintf(to, "$(e(", ewrap(expr->call.func));
         for (size_t i = 0; i < expr->call.num_args; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
@@ -871,8 +866,8 @@ void expr_pprint(FILE *to, const Expr *expr) {
       case EXPR_STRUCT:
         fprintf(to, "struct { ");
         for (size_t i = 0; i < expr->struct_.num_fields; i++) {
-            expr_pprint(to, &expr->struct_.field_types[i]);
-            fprintf(to, " %s; ", expr->struct_.field_names[i]);
+            efprintf(to, "$e %s; ", ewrap(&expr->struct_.field_types[i]),
+                expr->struct_.field_names[i]);
         }
         putc('}', to);
         break;
@@ -880,45 +875,39 @@ void expr_pprint(FILE *to, const Expr *expr) {
       case EXPR_UNION:
         fprintf(to, "union { ");
         for (size_t i = 0; i < expr->union_.num_fields; i++) {
-            expr_pprint(to, &expr->union_.field_types[i]);
-            fprintf(to, " %s; ", expr->union_.field_names[i]);
+            efprintf(to, "$e %s; ", ewrap(&expr->union_.field_types[i]),
+                expr->union_.field_names[i]);
         }
         putc('}', to);
         break;
 
       case EXPR_PACK:
-        putc('[', to);
-        expr_pprint_(to, expr->pack.type);
-        fprintf(to, "]{");
+        efprintf(to, "[$e]{", ewrap(expr->pack.type));
         for (size_t i = 0; i < expr->pack.num_assigns; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
 
-            fprintf(to, ".%s = ", expr->pack.field_names[i]);
-            expr_pprint(to, &expr->pack.assigns[i]);
+            efprintf(to, ".%s = $e", ewrap(&expr->pack.assigns[i]),
+                expr->pack.field_names[i]);
         }
         putc('}', to);
         break;
 
       case EXPR_MEMBER:
-        expr_pprint_(to, expr->member.record);
-        fprintf(to, ".%s", expr->member.field);
+        efprintf(to, "$e.%s", ewrap(expr->member.record), expr->member.field);
         break;
 
       case EXPR_POINTER:
-        expr_pprint_(to, expr->pointer);
-        putc('*', to);
+        efprintf(to, "$(e*", ewrap(expr->pointer));
         break;
 
       case EXPR_REFERENCE:
-        putc('&', to);
-        expr_pprint_(to, expr->pointer);
+        efprintf(to, "&$(e", ewrap(expr->pointer));
         break;
 
       case EXPR_DEREFERENCE:
-        putc('*', to);
-        expr_pprint_(to, expr->pointer);
+        efprintf(to, "*$(e", ewrap(expr->pointer));
         break;
     }
 }
@@ -926,8 +915,8 @@ void expr_pprint(FILE *to, const Expr *expr) {
 void top_level_pprint(FILE *to, const TopLevel *top_level) {
     switch (top_level->tag) {
        case TOP_LEVEL_FUNC:
-        expr_pprint(to, &top_level->func.ret_type);
-        fprintf(to, " %s(", top_level->name);
+        efprintf(to, "$e %s(", ewrap(&top_level->func.ret_type),
+            top_level->name);
 
         for (size_t i = 0; i < top_level->func.num_params; i++) {
             if (i > 0) {
@@ -939,9 +928,7 @@ void top_level_pprint(FILE *to, const TopLevel *top_level) {
                 fprintf(to, " %s", top_level->func.param_names[i]);
             }
         }
-        fprintf(to, ") = \n    ");
-        expr_pprint(to, &top_level->func.body);
-        fprintf(to, ";\n");
+        efprintf(to, ") = \n    $e;\n", ewrap(&top_level->func.body));
         break;
     }
 }
@@ -954,4 +941,69 @@ void translation_unit_pprint(FILE *to, const TranslationUnit *unit) {
 
         top_level_pprint(to, &unit->top_levels[i]);
     }
+}
+
+/***** Specializations of printf *********************************************/
+
+void efprintf(FILE *file, const char *format, const void *eargs[], ...) {
+    va_list vargs;
+    va_start(vargs, eargs);
+
+    size_t len = strlen(format);
+    char *format_copy; alloc_array(format_copy, len + 1);
+    strcpy(format_copy, format);
+
+    size_t start = 0;
+    size_t i = 0;
+    while (format_copy[i] != '\0') {
+        if (format_copy[i] == '$') {
+            format_copy[i] = '\0';
+            vfprintf(file, &format_copy[start], vargs);
+
+            i += 1;
+            switch (format_copy[i]) {
+              case '$':
+                putc('$', file);
+                break;
+
+              case 'e':
+                expr_pprint(file, (Expr*)*eargs);
+                eargs += 1;
+                break;
+
+              case '(':
+                i += 1;
+                switch (format_copy[i]) {
+                  case 'e':
+                    expr_pprint_(file, (Expr*)*eargs);
+                    eargs += 1;
+                    break;
+
+                  // Swallow errors
+                  case '\0':
+                    i -= 1;
+                    break;
+                  default:
+                    break;
+                }
+                break;
+
+              // Swallow errors
+              case '\0':
+                i -= 1;
+                break;
+              default:
+                break;
+            }
+
+            i += 1;
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    vfprintf(file, &format_copy[start], vargs);
+
+    dealloc(format_copy);
+    va_end(vargs);
 }
