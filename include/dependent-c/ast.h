@@ -130,12 +130,6 @@ struct Expr {
         } pack;
         struct {
             Expr *record;
-            size_t num_fields;
-            const char **field_names;
-            Expr *in_expr;
-        } unpack;
-        struct {
-            Expr *record;
             size_t field_num;
         } access;
     };
@@ -214,7 +208,7 @@ void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
 #include "dependent-c/general.h"
 
 /* Substitute a variable in an expression for an expression. */
-bool expr_subst(Context *context, Expr *expr,
+void expr_subst(Context *context, Expr *expr,
     const char *name, const Expr *replacement);
 
 /***** Specializations of printf *********************************************/

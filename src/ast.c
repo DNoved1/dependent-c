@@ -384,25 +384,21 @@ void expr_free_vars(const Expr *expr, SymbolSet *free_vars) {
     }
 }
 
-static bool expr_forall_subst(Context *context, Expr *expr,
+static void expr_forall_subst(Context *context, Expr *expr,
         const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_FORALL);
-    bool ret_val = false;
 
     SymbolSet free_vars;
     expr_free_vars(replacement, &free_vars);
 
     for (size_t i = 0; i < expr->forall.num_params; i++) {
-        if (!expr_subst(context, &expr->forall.param_types[i],
-                name, replacement)) {
-            goto end_of_function;
-        }
+        expr_subst(context, &expr->forall.param_types[i], name, replacement);
         const char *old_param_name = expr->forall.param_names[i];
 
         if (old_param_name != NULL) {
             if (old_param_name == name) {
-                ret_val = true;
-                goto end_of_function;
+                symbol_set_free(&free_vars);
+                return;
             }
 
             if (symbol_set_contains(&free_vars, old_param_name)) {
@@ -415,49 +411,34 @@ static bool expr_forall_subst(Context *context, Expr *expr,
                 expr->forall.param_names[i] = new_param_name;
 
                 for (size_t j = i + 1; j < expr->forall.num_params; j++) {
-                    if (!expr_subst(context,
-                            &expr->forall.param_types[i],
-                            old_param_name, &new_replacement)) {
-                        goto end_of_function;
-                    }
+                    expr_subst(context, &expr->forall.param_types[i],
+                        old_param_name, &new_replacement);
                 }
-                if (!expr_subst(context, expr->forall.ret_type,
-                        old_param_name, &new_replacement)) {
-                    goto end_of_function;
-                }
+                expr_subst(context, expr->forall.ret_type,
+                    old_param_name, &new_replacement);
             }
         }
     }
-    if (!expr_subst(context, expr->forall.ret_type, name, replacement)) {
-        goto end_of_function;
-    }
 
-    ret_val = true;
+    expr_subst(context, expr->forall.ret_type, name, replacement);
 
-end_of_function:
     symbol_set_free(&free_vars);
-    return ret_val;
 }
 
-static bool expr_lambda_subst(Context *context, Expr *expr,
+static void expr_lambda_subst(Context *context, Expr *expr,
         const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_LAMBDA);
-    bool ret_val = false;
 
     SymbolSet free_vars[1];
     expr_free_vars(replacement, free_vars);
 
     for (size_t i = 0; i < expr->lambda.num_params; i++) {
-        if (!expr_subst(context, &expr->lambda.param_types[i],
-                name, replacement)) {
-            goto end_of_function;
-        }
-
+        expr_subst(context, &expr->lambda.param_types[i], name, replacement);
         const char *old_param_name = expr->lambda.param_names[i];
 
         if (old_param_name == name) {
-            ret_val = true;
-            goto end_of_function;
+            symbol_set_free(free_vars);
+            return;
         }
 
         if (symbol_set_contains(free_vars, old_param_name)) {
@@ -470,48 +451,33 @@ static bool expr_lambda_subst(Context *context, Expr *expr,
             expr->lambda.param_names[i] = new_param_name;
 
             for (size_t j = i + 1; j < expr->forall.num_params; j++) {
-                if (!expr_subst(context,
-                        &expr->lambda.param_types[i],
-                        old_param_name, &new_replacement)) {
-                    goto end_of_function;
-                }
+                expr_subst(context, &expr->lambda.param_types[i],
+                    old_param_name, &new_replacement);
             }
-            if (!expr_subst(context, expr->lambda.body,
-                    old_param_name, &new_replacement)) {
-                goto end_of_function;
-            }
+            expr_subst(context, expr->lambda.body,
+                old_param_name, &new_replacement);
         }
     }
 
-    if (!expr_subst(context, expr->lambda.body, name, replacement)) {
-        goto end_of_function;
-    }
+    expr_subst(context, expr->lambda.body, name, replacement);
 
-    ret_val = true;
-
-end_of_function:
     symbol_set_free(free_vars);
-    return ret_val;
 }
 
-static bool expr_sigma_subst(Context *context, Expr *expr,
+static void expr_sigma_subst(Context *context, Expr *expr,
         const char *name, const Expr *replacement) {
     assert(expr->tag == EXPR_SIGMA);
-    bool ret_val = false;
 
     SymbolSet free_vars;
     expr_free_vars(replacement, &free_vars);
 
     for (size_t i = 0; i < expr->sigma.num_fields; i++) {
-        if (!expr_subst(context, &expr->sigma.field_types[i],
-                name, replacement)) {
-            goto end_of_function;
-        }
+        expr_subst(context, &expr->sigma.field_types[i], name, replacement);
         const char *old_field_name = expr->sigma.field_names[i];
 
         if (old_field_name == name) {
-            ret_val = true;
-            goto end_of_function;
+            symbol_set_free(&free_vars);
+            return;
         }
 
         if (symbol_set_contains(&free_vars, old_field_name)) {
@@ -524,22 +490,16 @@ static bool expr_sigma_subst(Context *context, Expr *expr,
             expr->sigma.field_names[i] = new_field_name;
 
             for (size_t j = i + 1; j < expr->sigma.num_fields; j++) {
-                if (!expr_subst(context, &expr->sigma.field_types[i],
-                        old_field_name, &new_replacement)) {
-                    goto end_of_function;
-                }
+                expr_subst(context, &expr->sigma.field_types[i],
+                    old_field_name, &new_replacement);
             }
         }
     }
 
-    ret_val = true;
-
-end_of_function:
     symbol_set_free(&free_vars);
-    return ret_val;
 }
 
-bool expr_subst(Context *context, Expr *expr,
+void expr_subst(Context *context, Expr *expr,
         const char *name, const Expr *replacement) {
     SymbolSet free_vars;
 
@@ -550,60 +510,59 @@ bool expr_subst(Context *context, Expr *expr,
       case EXPR_BOOLEAN:
       case EXPR_NAT:
       case EXPR_NATURAL:
-        return true;
+        break;
 
       case EXPR_IDENT:
         if (name == expr->ident) {
             expr_free(expr);
             *expr = expr_copy(replacement);
         }
-        return true;
+        break;
 
       case EXPR_FORALL:
-        return expr_forall_subst(context, expr, name, replacement);
+        expr_forall_subst(context, expr, name, replacement);
+        break;
 
       case EXPR_LAMBDA:
-        return expr_lambda_subst(context, expr, name, replacement);
+        expr_lambda_subst(context, expr, name, replacement);
+        break;
 
       case EXPR_CALL:
-        if (!expr_subst(context, expr->call.func, name, replacement)) {
-            return false;
-        }
+        expr_subst(context, expr->call.func, name, replacement);
         for (size_t i = 0; i < expr->call.num_args; i++) {
-            if (!expr_subst(context, &expr->call.args[i], name, replacement)) {
-                return false;
-            }
+            expr_subst(context, &expr->call.args[i], name, replacement);
         }
-        return true;
+        break;
 
       case EXPR_ID:
-        return expr_subst(context, expr->id.expr1, name, replacement)
-            && expr_subst(context, expr->id.expr2, name, replacement);
+        expr_subst(context, expr->id.expr1, name, replacement);
+        expr_subst(context, expr->id.expr2, name, replacement);
+        break;
 
       case EXPR_REFLEXIVE:
-        return expr_subst(context, expr->reflexive, name, replacement);
+        expr_subst(context, expr->reflexive, name, replacement);
+        break;
 
       case EXPR_SUBSTITUTE:
-        return expr_subst(context, expr->substitute.proof, name, replacement)
-            && expr_subst(context, expr->substitute.family, name, replacement)
-            && expr_subst(context, expr->substitute.instance, name, replacement);
+        expr_subst(context, expr->substitute.proof, name, replacement);
+        expr_subst(context, expr->substitute.family, name, replacement);
+        expr_subst(context, expr->substitute.instance, name, replacement);
+        break;
 
       case EXPR_EXPLODE:
-        return expr_subst(context, expr->explode.void_instance,
-                name, replacement)
-            && expr_subst(context, expr->explode.into_type, name, replacement);
+        expr_subst(context, expr->explode.void_instance, name, replacement);
+        expr_subst(context, expr->explode.into_type, name, replacement);
+        break;
 
       case EXPR_IFTHENELSE:
-        return expr_subst(context, expr->ifthenelse.predicate, name, replacement)
-            && expr_subst(context, expr->ifthenelse.then_, name, replacement)
-            && expr_subst(context, expr->ifthenelse.else_, name, replacement);
+        expr_subst(context, expr->ifthenelse.predicate, name, replacement);
+        expr_subst(context, expr->ifthenelse.then_, name, replacement);
+        expr_subst(context, expr->ifthenelse.else_, name, replacement);
+        break;
 
       case EXPR_NAT_IND:
-        if (!expr_subst(context, expr->nat_ind.natural, name, replacement)
-                || !expr_subst(context, expr->nat_ind.base_val,
-                    name, replacement)) {
-            return false;
-        }
+        expr_subst(context, expr->nat_ind.natural, name, replacement);
+        expr_subst(context, expr->nat_ind.base_val, name, replacement);
         expr_free_vars(replacement, &free_vars);
         if (symbol_set_contains(&free_vars, expr->nat_ind.ind_name)) {
             const char *new_ind_name = symbol_gensym(&context->interns,
@@ -613,34 +572,29 @@ bool expr_subst(Context *context, Expr *expr,
                 , .ident = new_ind_name
             };
             expr->nat_ind.ind_name = new_ind_name;
-            if (!expr_subst(context, expr->nat_ind.ind_val,
-                    expr->nat_ind.ind_name, &new_replacement)) {
-                symbol_set_free(&free_vars);
-                return false;
-            }
+            expr_subst(context, expr->nat_ind.ind_val,
+                expr->nat_ind.ind_name, &new_replacement);
         }
         symbol_set_free(&free_vars);
-        return expr_subst(context, expr->nat_ind.ind_val, name, replacement);
+        expr_subst(context, expr->nat_ind.ind_val, name, replacement);
+        break;
 
       case EXPR_SIGMA:
-        return expr_sigma_subst(context, expr, name, replacement);
+        expr_sigma_subst(context, expr, name, replacement);
+        break;
 
       case EXPR_PACK:
         if (expr->pack.as_type != NULL) {
-            if (!expr_subst(context, expr->pack.as_type, name, replacement)) {
-                return false;
-            }
+            expr_subst(context, expr->pack.as_type, name, replacement);
         }
         for (size_t i = 0; i < expr->pack.num_fields; i++) {
-            if (!expr_subst(context, &expr->pack.field_values[i],
-                    name, replacement)) {
-                return false;
-            }
+            expr_subst(context, &expr->pack.field_values[i], name, replacement);
         }
-        return true;
+        break;
 
       case EXPR_ACCESS:
-        return expr_subst(context, expr->access.record, name, replacement);
+        expr_subst(context, expr->access.record, name, replacement);
+        break;
     }
 }
 

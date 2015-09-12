@@ -124,17 +124,11 @@ static bool type_infer_call(Context *context, const Expr *expr, Expr *result) {
 
         if (type_check(context, &arg, &forall.forall.param_types[i])) {
             for (size_t j = i + 1; j < forall.forall.num_params; j++) {
-                if (!expr_subst(context, &forall.forall.param_types[j],
-                        param_name, &arg)) {
-                    expr_free(&forall);
-                    return false;
-                }
+                expr_subst(context, &forall.forall.param_types[j],
+                    param_name, &arg);
             }
 
-            if (!expr_subst(context, forall.forall.ret_type, param_name, &arg)) {
-                expr_free(&forall);
-                return false;
-            }
+            expr_subst(context, forall.forall.ret_type, param_name, &arg);
         } else {
             expr_free(&forall);
             return false;
@@ -317,11 +311,8 @@ static bool type_infer_pack(Context *context, const Expr *expr, Expr *result) {
             }
 
             for (size_t j = i + 1; j < sigma.sigma.num_fields; j++) {
-                if (!expr_subst(context, &sigma.sigma.field_types[j],
-                        sigma.sigma.field_names[i],
-                        &expr->pack.field_values[i])) {
-                    return false;
-                }
+                expr_subst(context, &sigma.sigma.field_types[j],
+                    sigma.sigma.field_names[i], &expr->pack.field_values[i]);
             }
         }
 
@@ -370,11 +361,7 @@ static bool type_infer_access(Context *context, const Expr *expr, Expr *result) 
                 , .access.field_num = i
             };
 
-            if (!expr_subst(context, result, field_name, &replacement)) {
-                expr_free(&sigma);
-                expr_free(result);
-                return false;
-            }
+            expr_subst(context, result, field_name, &replacement);
         }
     }
 
@@ -547,11 +534,8 @@ static bool type_eval_call(Context *context, const Expr *type, Expr *result) {
     expr_free(result);
 
     for (size_t i = 0; i < type->call.num_args; i++) {
-        if (!expr_subst(context, reduced_func->lambda.body,
-                reduced_func->lambda.param_names[i], &type->call.args[i])) {
-            expr_free(reduced_func);
-            return false;
-        }
+        expr_subst(context, reduced_func->lambda.body,
+            reduced_func->lambda.param_names[i], &type->call.args[i]);
     }
 
     bool ret_val = type_eval(context, reduced_func->lambda.body, result);
