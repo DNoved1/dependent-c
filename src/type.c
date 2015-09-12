@@ -332,9 +332,15 @@ static bool type_infer_pack(Context *context, const Expr *expr, Expr *result) {
 
 static bool type_infer_access(Context *context, const Expr *expr, Expr *result) {
     assert(expr->tag == EXPR_ACCESS);
+    bool ret_val;
 
-    Expr sigma;
-    if (!type_infer(context, expr->access.record, &sigma)) {
+    Expr sigma_expr, sigma;
+    if (!type_infer(context, expr->access.record, &sigma_expr)) {
+        return false;
+    }
+    ret_val = type_eval(context, &sigma_expr, &sigma);
+    expr_free(&sigma_expr);
+    if (!ret_val) {
         return false;
     }
 
@@ -516,36 +522,6 @@ bool type_equal(Context *context, const Expr *type1, const Expr *type2) {
     return ret_val;
 }
 
-static bool type_eval_ifthenelse(Context *context, const Expr *type,
-        Expr *result) {
-    assert(type->tag == EXPR_IFTHENELSE);
-
-    // If both sides of the if branch are equivalent we can reduce to that
-    if (type_equal(context, type->ifthenelse.then_,
-            type->ifthenelse.else_)) {
-        return type_eval(context, type->ifthenelse.then_, result);
-    } else {
-        fprintf(stderr, "    While checking if both if-then-else branches "
-            "have the same type.\n");
-    }
-
-    Expr reduced_cond[1];
-    if (!type_eval(context, type->ifthenelse.predicate, reduced_cond)) {
-        return false;
-    }
-
-    if (reduced_cond->tag == EXPR_BOOLEAN) {
-        if (reduced_cond->boolean) {
-            return type_eval(context, type->ifthenelse.then_, result);
-        } else {
-            return type_eval(context, type->ifthenelse.else_, result);
-        }
-    } else {
-        expr_free(reduced_cond);
-        return false;
-    }
-}
-
 static bool type_eval_call(Context *context, const Expr *type, Expr *result) {
     assert(type->tag == EXPR_CALL);
 
@@ -583,9 +559,133 @@ static bool type_eval_call(Context *context, const Expr *type, Expr *result) {
     return ret_val;
 }
 
+static bool type_eval_ifthenelse(Context *context, const Expr *type,
+        Expr *result) {
+    assert(type->tag == EXPR_IFTHENELSE);
+
+    // If both sides of the if branch are equivalent we can reduce to that
+    if (type_equal(context, type->ifthenelse.then_,
+            type->ifthenelse.else_)) {
+        return type_eval(context, type->ifthenelse.then_, result);
+    } else {
+        fprintf(stderr, "    While checking if both if-then-else branches "
+            "have the same type.\n");
+    }
+
+    Expr reduced_cond[1];
+    if (!type_eval(context, type->ifthenelse.predicate, reduced_cond)) {
+        return false;
+    }
+
+    if (reduced_cond->tag == EXPR_BOOLEAN) {
+        if (reduced_cond->boolean) {
+            return type_eval(context, type->ifthenelse.then_, result);
+        } else {
+            return type_eval(context, type->ifthenelse.else_, result);
+        }
+    } else {
+        expr_free(reduced_cond);
+        return false;
+    }
+}
+
+static bool type_eval_substitute(Context *context, const Expr *type,
+        Expr *result) {
+    assert(type->tag == EXPR_SUBSTITUTE);
+
+    Expr reduced_refl;
+    if (!type_eval(context, type->substitute.proof, &reduced_refl)) {
+        return false;
+    }
+
+    if (reduced_refl.tag != EXPR_REFLEXIVE) {
+        efprintf(stderr, "Cannot substitute with non-literal reflexive proof "
+            "($e).\n", ewrap(&reduced_refl));
+        expr_free(&reduced_refl);
+        return false;
+    }
+
+    *result = expr_copy(type->substitute.instance);
+    expr_free(&reduced_refl);
+    return true;
+}
+
+static bool type_eval_explode(Context *context, const Expr *type, Expr *result) {
+    assert(type->tag == EXPR_EXPLODE);
+
+    efprintf(stderr, "Cannot reduce explosion ($e).\n", ewrap(type));
+    return false;
+}
+
+static bool type_eval_nat_ind(Context *context, const Expr *type, Expr *result) {
+    assert(type->tag == EXPR_NAT_IND);
+
+    Expr reduced_nat;
+    if (!type_eval(context, type->nat_ind.natural, &reduced_nat)) {
+        return false;
+    }
+
+    if (reduced_nat.tag == EXPR_NATURAL) {
+        if (reduced_nat.natural == (type->nat_ind.goes_down ? 0 : UINT64_MAX)) {
+            bool ret_val = type_eval(context, type->nat_ind.base_val, result);
+            expr_free(&reduced_nat);
+            return ret_val;
+        } else {
+            Expr ind_val = expr_copy(type->nat_ind.ind_val);
+            const Expr replacement = {
+                  .tag = EXPR_NATURAL
+                , .natural = reduced_nat.natural
+                    + (type->nat_ind.goes_down ? -1 : +1)
+            };
+            expr_subst(context, &ind_val, type->nat_ind.ind_name,
+                &replacement);
+            bool ret_val = type_eval(context, &ind_val, result);
+            expr_free(&reduced_nat);
+            expr_free(&ind_val);
+            return ret_val;
+        }
+    } else {
+        efprintf(stderr, "Cannot evaluate natural induction with non-literal "
+            "natural ($e).\n", ewrap(&reduced_nat));
+        expr_free(&reduced_nat);
+        return false;
+    }
+}
+
+static bool type_eval_access(Context *context, const Expr *type, Expr *result) {
+    assert(type->tag == EXPR_ACCESS);
+
+    Expr reduced_pack;
+    if (!type_eval(context, type->access.record, &reduced_pack)) {
+        return false;
+    }
+
+    if (reduced_pack.tag == EXPR_PACK) {
+        size_t num_fields = reduced_pack.pack.num_fields;
+        size_t field_num = type->access.field_num;
+
+        if (field_num >= num_fields) {
+            efprintf(stderr, "Cannot access field #%zu of literal record ($e) "
+                "with %zu fields.\n", ewrap(&reduced_pack),
+                field_num, num_fields);
+            expr_free(&reduced_pack);
+            return false;
+        }
+
+        bool ret_val = type_eval(context,
+            &reduced_pack.pack.field_values[field_num], result);
+        expr_free(&reduced_pack);
+        return ret_val;
+    } else {
+        efprintf(stderr, "Cannot evaluate access of non-literal record ($e).\n",
+            ewrap(&reduced_pack));
+        expr_free(&reduced_pack);
+        return false;
+    }
+}
+
 bool type_eval(Context *context, const Expr *type, Expr *result) {
     Expr temp[1];
-    // TODO, better normalization, up to whnf.
 
     switch (type->tag) {
       // These are all already in weak head normal form.
@@ -612,27 +712,19 @@ bool type_eval(Context *context, const Expr *type, Expr *result) {
         return type_eval_call(context, type, result);
 
       case EXPR_SUBSTITUTE:
-        // TODO, implement
-        *result = expr_copy(type);
-        return true;
+        return type_eval_substitute(context, type, result);
 
       case EXPR_EXPLODE:
-        // TODO, implement
-        *result = expr_copy(type);
-        return true;
+        return type_eval_explode(context, type, result);
 
       case EXPR_IFTHENELSE:
         return type_eval_ifthenelse(context, type, result);
 
       case EXPR_NAT_IND:
-        // TODO, implement
-        *result = expr_copy(type);
-        return true;
+        return type_eval_nat_ind(context, type, result);
 
       case EXPR_ACCESS:
-        // TODO, implement
-        *result = expr_copy(type);
-        return true;
+        return type_eval_access(context, type, result);
     }
 }
 
