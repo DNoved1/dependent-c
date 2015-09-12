@@ -8,16 +8,6 @@
 #include "dependent-c/general.h"
 #include "dependent-c/lex.h"
 #include "dependent-c/memory.h"
-
-#define PARSER_CONSTRUCT_BIN_OP(__op__) \
-    do { \
-        yyval.expr.tag = EXPR_BIN_OP; \
-        yyval.expr.bin_op.op = __op__; \
-        alloc(yyval.expr.bin_op.expr1); \
-        *yyval.expr.bin_op.expr1 = yyvsp[-2].expr; \
-        alloc(yyval.expr.bin_op.expr2); \
-        *yyval.expr.bin_op.expr2 = yyvsp[0].expr; \
-    } while (0)
 %}
 
 %define api.pure full
@@ -31,7 +21,6 @@
     const char *ident;
 
     /* Parser values */
-    Literal literal;
     Expr expr;
     TopLevel top_level;
     TranslationUnit unit;
@@ -61,14 +50,12 @@
     } arg_list;
 
     struct {
-        size_t len;
-        const char **field_names;
-        Expr *assigns;
-    } pack_init_list;
+        bool is_zero;
+    } nat_ind_base_pattern;
     struct {
-        const char *field_name;
-        Expr assign;
-    } pack_init;
+        bool adds;
+        const char *name;
+    } nat_ind_ind_pattern;
 }
 
 %{
@@ -77,22 +64,24 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %}
 
     /* Reserved Words / Multicharacter symbols */
-%token TOK_TYPE     "type"
-%token TOK_VOID     "void"
-%token TOK_U64      "u64"
-%token TOK_BOOL     "bool"
-%token TOK_TRUE     "true"
-%token TOK_FALSE    "false"
-%token TOK_STRUCT   "struct"
-%token TOK_UNION    "union"
-%token TOK_IF       "if"
-%token TOK_THEN     "then"
-%token TOK_ELSE     "else"
-%token TOK_REFLEXIVE "reflexive"
-%token TOK_EQ       "=="
-%token TOK_NE       "!="
-%token TOK_LTE      "<="
-%token TOK_GTE      ">="
+%token TOK_TYPE         "Type"
+%token TOK_SINGLE_ARROW "->"
+%token TOK_BACK_ARROW   "<-"
+%token TOK_REFLEXIVE    "reflexive"
+%token TOK_SUBSTITUTE   "substitute"
+%token TOK_VOID         "Void"
+%token TOK_EXPLODE      "explode"
+%token TOK_BOOL         "Bool"
+%token TOK_TRUE         "true"
+%token TOK_FALSE        "false"
+%token TOK_IF           "if"
+%token TOK_THEN         "then"
+%token TOK_ELSE         "else"
+%token TOK_NAT          "Nat"
+%token TOK_CASE         "case"
+%token TOK_OF           "of"
+%token TOK_DOUBLE_ARROW "=>"
+%token TOK_NAT_MAX      "NAT_MAX"
 
     /* Integers */
 %token <integral> TOK_INTEGRAL
@@ -101,21 +90,19 @@ void yyerror(YYLTYPE *lloc, Context *context, const char *error_message);
 %token <ident> TOK_IDENT
 
     /* Result types of each rule */
-%type <literal> literal
-%type <expr> simple_expr postfix_expr prefix_expr add_expr relational_expr
-%type <expr> equality_expr identity_expr expr
+%type <expr> simple_expr postfix_expr prefix_expr identity_expr expr
 %type <top_level> top_level top_level_
 %type <unit> translation_unit
 
-%type <type_ident_list> type_ident_list
+%type <type_ident_list> type_ident_list type_ident_list_
 %type <type_ident> type_ident
 
-%type <param_list> param_list param_list_
-%type <param> param
+%type <param_list> maybe_type_ident_list maybe_type_ident_list_
+%type <param> maybe_type_ident
 %type <arg_list> arg_list arg_list_
 
-%type <pack_init_list> pack_init_list pack_init_list_
-%type <pack_init> pack_init
+%type <nat_ind_base_pattern> nat_ind_base_pattern
+%type <nat_ind_ind_pattern> nat_ind_ind_pattern
 
 %%
 
@@ -124,126 +111,149 @@ main:
         context->ast = $1; }
     ;
 
-literal:
-      "type"        { $$.tag = LIT_TYPE;                                      }
-    | "void"        { $$.tag = LIT_VOID;                                      }
-    | "u64"         { $$.tag = LIT_U64;                                       }
-    | "bool"        { $$.tag = LIT_BOOL;                                      }
-    | "true"        { $$.tag = LIT_BOOLEAN; $$.boolean = true;                }
-    | "false"       { $$.tag = LIT_BOOLEAN; $$.boolean = false;               }
-    | TOK_INTEGRAL  { $$.tag = LIT_INTEGRAL; $$.integral = $1;                }
-    ;
-
 simple_expr:
       '(' expr ')'  {
         $$ = $2; }
-    | literal {
-        $$.tag = EXPR_LITERAL;
-        $$.literal = $1; }
     | TOK_IDENT {
         $$.tag = EXPR_IDENT;
         $$.ident = $1; }
-    | "struct" '{' type_ident_list '}' {
-        $$.tag = EXPR_STRUCT;
-        $$.struct_.num_fields = $3.len;
-        $$.struct_.field_types = $3.types;
-        $$.struct_.field_names = $3.idents; }
-    | "union" '{' type_ident_list '}' {
-        $$.tag = EXPR_UNION;
-        $$.union_.num_fields = $3.len;
-        $$.union_.field_types = $3.types;
-        $$.union_.field_names = $3.idents; }
+    | "Type" {
+        $$.tag = EXPR_TYPE; }
+    | "reflexive" '(' expr ')' {
+        $$.tag = EXPR_REFLEXIVE;
+        alloc_assign($$.reflexive, $3); }
+    | "substitute" '(' expr[proof] ',' expr[family] ',' expr[instance] ')' {
+        $$.tag = EXPR_SUBSTITUTE;
+        alloc_assign($$.substitute.proof, $proof);
+        alloc_assign($$.substitute.family, $family);
+        alloc_assign($$.substitute.instance, $instance); }
+    | "Void" {
+        $$.tag = EXPR_VOID; }
+    | "explode" '(' expr[instance] ',' expr[type] ')' {
+        $$.tag = EXPR_EXPLODE;
+        alloc_assign($$.explode.void_instance, $instance);
+        alloc_assign($$.explode.into_type, $type); }
+    | "Bool" {
+        $$.tag = EXPR_BOOL; }
+    | "true" {
+        $$.tag = EXPR_BOOLEAN;
+        $$.boolean = true; }
+    | "false" {
+        $$.tag = EXPR_BOOLEAN;
+        $$.boolean = false; }
+    | "Nat" {
+        $$.tag = EXPR_NAT; }
+    | TOK_INTEGRAL {
+        $$.tag = EXPR_NATURAL;
+        $$.natural = $1; }
+    | '{' maybe_type_ident_list[fields] '}' {
+        $$.tag = EXPR_SIGMA;
+        $$.sigma.num_fields = $fields.len;
+        $$.sigma.field_names = $fields.names;
+        $$.sigma.field_types = $fields.types; }
+    | '<' arg_list[values] '>' {
+        $$.tag = EXPR_PACK;
+        $$.pack.as_type = NULL;
+        $$.pack.num_fields = $values.len;
+        $$.pack.field_values = $values.args; }
+    | '(' '<' arg_list[values] '>' ':' expr[type] ')' {
+        $$.tag = EXPR_PACK;
+        alloc_assign($$.pack.as_type, $type);
+        $$.pack.num_fields = $values.len;
+        $$.pack.field_values = $values.args; }
     ;
 
 postfix_expr:
       simple_expr
-    | postfix_expr '*' {
-        $$.tag = EXPR_POINTER;
-        alloc($$.pointer);
-        *$$.pointer = $1; }
-    | postfix_expr '.' TOK_IDENT {
-        $$.tag = EXPR_MEMBER;
-        alloc($$.member.record);
-        *$$.member.record = $1;
-        $$.member.field = $3; }
-    | postfix_expr '(' arg_list ')' {
+    | postfix_expr[func] '(' arg_list[args] ')' {
         $$.tag = EXPR_CALL;
-        alloc($$.call.func);
-        *$$.call.func = $1;
-        $$.call.num_args = $3.len;
-        $$.call.args = $3.args; }
-    | "reflexive" '(' expr ')' {
-        $$.tag = EXPR_REFLEXIVE;
-        alloc($$.pointer);
-        *$$.pointer = $3; }
-    | postfix_expr '[' param_list ']' {
-        $$.tag = EXPR_FUNC_TYPE;
-        alloc($$.func_type.ret_type);
-        *$$.func_type.ret_type = $1;
-        $$.func_type.num_params = $3.len;
-        $$.func_type.param_types = $3.types;
-        $$.func_type.param_names = $3.names; }
-    | '[' expr ']' '{' pack_init_list '}' {
-        $$.tag = EXPR_PACK;
-        alloc($$.pack.type);
-        *$$.pack.type = $2;
-        $$.pack.num_assigns = $5.len;
-        $$.pack.field_names = $5.field_names;
-        $$.pack.assigns = $5.assigns; }
+        alloc_assign($$.call.func, $func);
+        $$.call.num_args = $args.len;
+        $$.call.args = $args.args; }
+    | postfix_expr[record] '[' TOK_INTEGRAL[field_num] ']' {
+        $$.tag = EXPR_ACCESS;
+        alloc_assign($$.access.record, $record);
+        $$.access.field_num = $field_num; }
     ;
 
 prefix_expr:
       postfix_expr
-    | "if" expr "then" expr "else" prefix_expr {
+    | '[' maybe_type_ident_list[params] ']' "->" prefix_expr[ret_type] {
+        $$.tag = EXPR_FORALL;
+        $$.forall.num_params = $params.len;
+        $$.forall.param_types = $params.types;
+        $$.forall.param_names = $params.names;
+        alloc($$.forall.ret_type); *$$.forall.ret_type = $ret_type; }
+    | '\\' '(' type_ident_list[params] ')' "=>" prefix_expr[body] {
+        $$.tag = EXPR_LAMBDA;
+        $$.lambda.num_params = $params.len;
+        $$.lambda.param_types = $params.types;
+        $$.lambda.param_names = $params.idents;
+        alloc_assign($$.lambda.body, $body); }
+    | "if" expr[pred]
+          "then" expr[then_]
+          "else" prefix_expr[else_] {
         $$.tag = EXPR_IFTHENELSE;
-        alloc($$.ifthenelse.predicate);
-        *$$.ifthenelse.predicate = $2;
-        alloc($$.ifthenelse.then_);
-        *$$.ifthenelse.then_ = $4;
-        alloc($$.ifthenelse.else_);
-        *$$.ifthenelse.else_ = $6; }
-    | '&' prefix_expr {
-        $$.tag = EXPR_REFERENCE;
-        alloc($$.pointer);
-        *$$.pointer = $2; }
-    | '*' prefix_expr {
-        $$.tag = EXPR_DEREFERENCE;
-        alloc($$.pointer);
-        *$$.pointer = $2; }
+        alloc_assign($$.ifthenelse.predicate, $pred);
+        alloc_assign($$.ifthenelse.then_, $then_);
+        alloc_assign($$.ifthenelse.else_, $else_); }
+    | "case" expr[natural] "of"
+          '|' nat_ind_base_pattern[base_pat] "=>" expr[base_val]
+          '|' nat_ind_ind_pattern[ind_pat] "=>" prefix_expr[ind_val] {
+        if ($base_pat.is_zero != $ind_pat.adds) {
+            if ($base_pat.is_zero) {
+                yyerror(&@ind_pat, context, "Expected inductive step to go "
+                    "downwards when base case was \"0\".");
+            } else {
+                yyerror(&@ind_pat, context, "Expected inductive step to go "
+                    "upwards when base case was \"NAT_MAX\"");
+            }
+            YYERROR;
+        }
+        $$.tag = EXPR_NAT_IND;
+        alloc_assign($$.nat_ind.natural, $natural);
+        $$.nat_ind.goes_down = $base_pat.is_zero;
+        alloc_assign($$.nat_ind.base_val, $base_val);
+        $$.nat_ind.ind_name = $ind_pat.name;
+        alloc_assign($$.nat_ind.ind_val, $ind_val); }
     ;
 
-add_expr:
-      prefix_expr
-    | add_expr '+' prefix_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_ADD); }
-    | add_expr '-' prefix_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_SUB); }
+nat_ind_base_pattern:
+      TOK_INTEGRAL[base] {
+        if ($base != 0) {
+            yyerror(&@1, context, "Expected either \"0\" or \"NAT_MAX\" "
+                "for the base case of natural induction.");
+            YYERROR;
+        }
+        $$.is_zero = true; }
+    | "NAT_MAX" {
+        $$.is_zero = false; }
     ;
-
-relational_expr:
-      add_expr
-    | relational_expr '<' add_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_LT); }
-    | relational_expr "<=" add_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_LTE); }
-    | relational_expr '>' add_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_GT); }
-    | relational_expr ">=" add_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_GTE); }
-    ;
-
-equality_expr:
-      relational_expr
-    | equality_expr "==" relational_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_EQ); }
-    | equality_expr "!=" relational_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_NE); }
+nat_ind_ind_pattern:
+      TOK_IDENT[name] '+' TOK_INTEGRAL[step] {
+        if ($step != 1) {
+            yyerror(&@3, context, "Expected \"1\" for size of inductive "
+                "step.");
+            YYERROR;
+        }
+        $$.adds = true;
+        $$.name = $name; }
+    | TOK_IDENT[name] '-' TOK_INTEGRAL[step] {
+        if ($step != 1) {
+            yyerror(&@3, context, "Expected \"1\" for size of inductive "
+                "step.");
+            YYERROR;
+        }
+        $$.adds = false;
+        $$.name = $name; }
     ;
 
 identity_expr:
-      equality_expr
-    | equality_expr '=' equality_expr {
-        PARSER_CONSTRUCT_BIN_OP(BIN_OP_ID); }
+      prefix_expr
+    | prefix_expr '=' prefix_expr {
+        $$.tag = EXPR_ID;
+        alloc_assign($$.id.expr1, $1);
+        alloc_assign($$.id.expr2, $3); }
     ;
 
 expr:
@@ -259,16 +269,26 @@ top_level:
     ;
 
 top_level_:
-    /* TODO: note that param_list allows non-named params, which we don't
-             want here. */
-      expr TOK_IDENT '(' param_list ')' '=' expr ';' {
-        $$.tag = TOP_LEVEL_FUNC;
-        $$.func.ret_type = $1;
-        $$.name = $2;
-        $$.func.num_params = $4.len;
-        $$.func.param_types = $4.types;
-        $$.func.param_names = $4.names;
-        $$.func.body = $7; }
+      expr[ret_type] "<-" TOK_IDENT[name] '(' type_ident_list[params] ')' '='
+          expr[body] ';' {
+        $$.tag = TOP_LEVEL_EXPR_DECL;
+        $$.name = $name;
+
+        $$.expr_decl.type.tag = EXPR_FORALL;
+        $$.expr_decl.type.forall.num_params = $params.len;
+        alloc_array($$.expr_decl.type.forall.param_types, $params.len);
+        alloc_array($$.expr_decl.type.forall.param_names, $params.len);
+        for (size_t i = 0; i < $params.len; i++) {
+            $$.expr_decl.type.forall.param_types[i] = expr_copy(&$params.types[i]);
+            $$.expr_decl.type.forall.param_names[i] = $params.idents[i];
+        }
+        alloc_assign($$.expr_decl.type.forall.ret_type, $ret_type);
+
+        $$.expr_decl.expr.tag = EXPR_LAMBDA;
+        $$.expr_decl.expr.lambda.num_params = $params.len;
+        $$.expr_decl.expr.lambda.param_types = $params.types;
+        $$.expr_decl.expr.lambda.param_names = $params.idents;
+        alloc_assign($$.expr_decl.expr.lambda.body, $body); }
     ;
 
 translation_unit:
@@ -287,35 +307,42 @@ type_ident_list:
         $$.len = 0;
         $$.types = NULL;
         $$.idents = NULL; }
-    | type_ident_list type_ident {
+    | type_ident_list_
+    ;
+type_ident_list_:
+      type_ident {
+        $$.len = 1;
+        alloc_array($$.types, 1);  $$.types[0] = $1.type;
+        alloc_array($$.idents, 1); $$.idents[0] = $1.ident; }
+    | type_ident_list ',' type_ident {
         $$ = $1;
         realloc_array($$.types, $$.len + 1);
-        $$.types[$$.len] = $2.type;
+        $$.types[$$.len] = $3.type;
         realloc_array($$.idents, $$.len + 1);
-        $$.idents[$$.len] = $2.ident;
+        $$.idents[$$.len] = $3.ident;
         $$.len += 1; }
     ;
 type_ident:
-    expr TOK_IDENT ';' {
-        $$.type = $1;
-        $$.ident = $2;
+    TOK_IDENT[ident] ':' expr[type] {
+        $$.type = $type;
+        $$.ident = $ident;
     };
 
-param_list:
+maybe_type_ident_list:
       %empty {
         $$.len = 0;
         $$.types = NULL;
         $$.names = NULL; }
-    | param_list_
+    | maybe_type_ident_list_
     ;
-param_list_:
-      param  {
+maybe_type_ident_list_:
+      maybe_type_ident  {
         $$.len = 1;
         alloc_array($$.types, 1);
         $$.types[0] = $1.type;
         alloc_array($$.names, 1);
         $$.names[0] = $1.name; }
-    | param_list_ ',' param {
+    | maybe_type_ident_list_ ',' maybe_type_ident {
         $$ = $1;
         realloc_array($$.types, $$.len + 1);
         $$.types[$$.len] = $3.type;
@@ -323,13 +350,13 @@ param_list_:
         $$.names[$$.len] = $3.name;
         $$.len += 1; }
     ;
-param:
+maybe_type_ident:
       expr {
         $$.type = $1;
         $$.name = NULL; }
-    | expr TOK_IDENT {
-        $$.type = $1;
-        $$.name = $2; }
+    | TOK_IDENT ':' expr {
+        $$.type = $3;
+        $$.name = $1; }
     ;
 
 arg_list:
@@ -350,34 +377,6 @@ arg_list_:
         $$.len += 1; }
     ;
 
-pack_init_list:
-      %empty {
-        $$.len = 0;
-        $$.field_names = NULL;
-        $$.assigns = NULL; }
-    | pack_init_list_
-    ;
-pack_init_list_:
-      pack_init {
-        $$.len = 1;
-        alloc_array($$.field_names, 1);
-        $$.field_names[0] = $1.field_name;
-        alloc_array($$.assigns, 1);
-        $$.assigns[0] = $1.assign; }
-    | pack_init_list_ ',' pack_init {
-        $$ = $1;
-        realloc_array($$.field_names, $$.len + 1);
-        $$.field_names[$$.len] = $3.field_name;
-        realloc_array($$.assigns, $$.len + 1);
-        $$.assigns[$$.len] = $3.assign;
-        $$.len += 1; }
-    ;
-pack_init:
-      '.' TOK_IDENT '=' expr {
-        $$.field_name = $2;
-        $$.assign = $4; }
-    ;
-
 %%
 
 static int token_stream_pop_char(TokenStream *stream) {
@@ -386,7 +385,7 @@ static int token_stream_pop_char(TokenStream *stream) {
     if (c == '\n') {
         stream->line += 1;
         stream->column = 1;
-    } else if (c != EOF ){
+    } else if (c != EOF) {
         stream->column += 1;
     }
 
@@ -401,6 +400,12 @@ static int token_stream_pop_char(TokenStream *stream) {
 //       popped on a '\n' character. Reward/Effort ratio is a bit low though.
 static void token_stream_push_char(TokenStream *stream, int c) {
     char_stream_push(&stream->source, c);
+
+    if (c == '\n') {
+        stream->line -= 1;
+    } else if (c != EOF) {
+        stream->column -= 1;
+    }
 }
 
 static void skip_whitespace(TokenStream *stream) {
@@ -451,18 +456,21 @@ start_of_function:;
     }
 
         if (false) {}
-        check_is_reserved(type,     TOK_TYPE)
-        check_is_reserved(void,     TOK_VOID)
-        check_is_reserved(u64,      TOK_U64)
-        check_is_reserved(bool,     TOK_BOOL)
-        check_is_reserved(true,     TOK_TRUE)
-        check_is_reserved(false,    TOK_FALSE)
-        check_is_reserved(struct,   TOK_STRUCT)
-        check_is_reserved(union,    TOK_UNION)
-        check_is_reserved(if,       TOK_IF)
-        check_is_reserved(then,     TOK_THEN)
-        check_is_reserved(else,     TOK_ELSE)
-        check_is_reserved(reflexive, TOK_REFLEXIVE)
+        check_is_reserved(Type,         TOK_TYPE)
+        check_is_reserved(reflexive,    TOK_REFLEXIVE)
+        check_is_reserved(substitute,   TOK_SUBSTITUTE)
+        check_is_reserved(Void,         TOK_VOID)
+        check_is_reserved(explode,      TOK_EXPLODE)
+        check_is_reserved(Bool,         TOK_BOOL)
+        check_is_reserved(true,         TOK_TRUE)
+        check_is_reserved(false,        TOK_FALSE)
+        check_is_reserved(if,           TOK_IF)
+        check_is_reserved(then,         TOK_THEN)
+        check_is_reserved(else,         TOK_ELSE)
+        check_is_reserved(Nat,          TOK_NAT)
+        check_is_reserved(case,         TOK_CASE)
+        check_is_reserved(of,           TOK_OF)
+        check_is_reserved(NAT_MAX,      TOK_NAT_MAX)
         else {
             const char *interned_ident = symbol_intern(&context->interns, ident);
             dealloc(ident);
@@ -490,49 +498,38 @@ start_of_function:;
         return TOK_INTEGRAL;
     } else if (c == '=') {
         c = token_stream_pop_char(stream);
-        if (c == '=') {
-            return TOK_EQ;
+        if (c == '>') {
+            return TOK_DOUBLE_ARROW;
         } else {
             token_stream_push_char(stream, c);
             return '=';
         }
-    } else if (c == '!') {
+    } else if (c == '-') {
         c = token_stream_pop_char(stream);
-        if (c == '=') {
-            return TOK_NE;
+        if (c == '>') {
+            return TOK_SINGLE_ARROW;
         } else {
             token_stream_push_char(stream, c);
-            fprintf(stderr, "Lexer encountered unexpected character '!' at "
-                "line %d, column %d. Skipping.\n",
-                lloc->first_line, lloc->first_column);
-            goto start_of_function;
+            return '-';
         }
     } else if (c == '<') {
         c = token_stream_pop_char(stream);
-        if (c == '=') {
-            return TOK_LTE;
+        if (c == '-') {
+            return TOK_BACK_ARROW;
         } else {
             token_stream_push_char(stream, c);
             return '<';
         }
-    } else if (c == '>') {
-        c = token_stream_pop_char(stream);
-        if (c == '=') {
-            return TOK_GTE;
-        } else {
-            token_stream_push_char(stream, c);
-            return '>';
-        }
     } else if (c == '(' || c == ')'
             || c == '[' || c == ']'
             || c == '{' || c == '}'
-            || c == ';'
-            || c == '.'
+                        || c == '>'
             || c == ','
-            || c == '*'
-            || c == '&'
+            || c == ';'
             || c == '+'
-            || c == '-') {
+            || c == ':'
+            || c == '\\'
+            || c == '|') {
         return c;
     } else if (c == EOF) {
         return 0;

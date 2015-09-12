@@ -1,28 +1,34 @@
-type Maybe(type T) =
-    struct {
-        bool valid;
-        if valid then T else struct {} value;
+Type <- Maybe(T : Type) =
+    {
+          valid : Bool
+        , value : if valid then T else {}
     };
 
-T maybe(type T, Maybe(T) maybe, T default) =
-    if maybe.valid
-        then maybe.value
+Bool <- maybe_valid(T : Type, maybe : Maybe(T)) = maybe[0];
+if maybe_valid(T, maybe) then T else {}
+    <- maybe_value(T : Type, maybe : Maybe(T)) = maybe[1];
+
+T <- maybe(T : Type, maybe : Maybe(T), default : T) =
+    if maybe_valid(T, maybe)
+        then maybe_value(T, maybe)
         else default;
 
-type Array(type T, u64 n) =
-    if n == 0
-        then struct {}
-        else struct { T fst; Array(T, n - 1) snd; };
+Type <- Array(T : Type, n : Nat) =
+    case n of
+        | 0 => {}
+        | x + 1 => {T, Array(T, x)};
 
-type lift_bool(bool b) =
+Type <- lift_bool(b : Bool) =
     if b
-        then struct {}
-        else union {};
+        then {}
+        else Void;
 
-T get_3_1(type T, Array(T, 3) array) =
-    array.snd.fst;
+T <- get_3_1(T : Type, array : Array(T, 3)) =
+    array[1][0];
 
-T get(type T, u64 n, u64 i, lift_bool(i < n) proof, Array(T, n) array) =
-    if i == 0
-        then array.fst
-        else get(T, n, i - 1, [struct{}]{}, array.snd);
+{Nat, Bool} <- add(x : Nat, y : Nat) =
+    case x of
+        | 0      => <y, false>
+        | x_ + 1 => case add(x_, y)[0] of
+            | NAT_MAX => <0, true>
+            | z_ - 1  => <z_, add(x_, y)[1]>;

@@ -48,6 +48,13 @@
 
 #endif /* NDEBUG */
 
+/* Shortcut for a common case. */
+#define alloc_assign(variable, value) \
+    do { \
+        alloc(variable); \
+        *(variable) = value; \
+    } while (0)
+
 void *_alloc(const char *file, int line, size_t size);
 void *_alloc_array(const char *file, int line, size_t size, size_t len);
 void *_realloc_array(const char *file, int line, void *array,

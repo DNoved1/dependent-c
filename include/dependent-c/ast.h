@@ -6,7 +6,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct Literal          Literal;
 typedef struct Expr             Expr;
 typedef struct Block            Block;
 typedef struct TopLevel         TopLevel;
@@ -21,66 +20,41 @@ typedef struct {
 /* For printing error messages. */
 void location_pprint(const char *file, const LocationInfo *info);
 
-/***** Literals **************************************************************/
-typedef enum {
-    // The type of types
-      LIT_TYPE
-    // Types representing integrals with a certain number of bits.
-    , LIT_VOID
-    , LIT_U64
-    , LIT_BOOL
-    // Literal integers
-    , LIT_INTEGRAL
-    // Literal boolean values (true & false)
-    , LIT_BOOLEAN
-} LiteralTag;
-
-struct Literal {
-    LiteralTag tag;
-    union {
-        uint64_t integral;
-        bool boolean;
-    };
-};
-
 /***** Expressions ***********************************************************/
 typedef enum {
-    // For creating the identity type. Is heterogeneous.
-      BIN_OP_ID
-
-    , BIN_OP_EQ
-    , BIN_OP_NE
-    , BIN_OP_LT
-    , BIN_OP_LTE
-    , BIN_OP_GT
-    , BIN_OP_GTE
-    , BIN_OP_ADD
-    , BIN_OP_SUB
-} BinaryOp;
-
-typedef enum {
     // Misc.
-      EXPR_LITERAL
-    , EXPR_IDENT
-    , EXPR_BIN_OP
-    , EXPR_IFTHENELSE
-    , EXPR_REFLEXIVE
+      EXPR_IDENT
+    , EXPR_TYPE
 
     // Function type, constructor, and destructor.
-    , EXPR_FUNC_TYPE
+    , EXPR_FORALL
     , EXPR_LAMBDA
     , EXPR_CALL
 
-    // Product/Union type, constructor, and destructor.
-    , EXPR_STRUCT
-    , EXPR_UNION
-    , EXPR_PACK
-    , EXPR_MEMBER
+    // Identity type, constructor, and destructor.
+    , EXPR_ID         // [A, B] -> Type
+    , EXPR_REFLEXIVE  // [A : Type, x : A] -> x = x
+    , EXPR_SUBSTITUTE // [x = y, T : [A] -> Type, T(x)] -> T(y)
 
-    // Pointer type, constructor, and destructor.
-    , EXPR_POINTER
-    , EXPR_REFERENCE
-    , EXPR_DEREFERENCE
+    // Void type and destructor. (Obviously there is no constructor).
+    , EXPR_VOID    // Type
+    , EXPR_EXPLODE // [Void, A : Type] -> A
+
+    // Boolean type, constructors, and destructor.
+    , EXPR_BOOL       // Type
+    , EXPR_BOOLEAN    // Bool
+    , EXPR_IFTHENELSE // [b : Bool, T : [Bool] -> Type, T(true), T(false)] -> T(b)
+
+    , EXPR_NAT     // Type
+    , EXPR_NATURAL // Nat
+    , EXPR_NAT_IND // One of:
+// [n : Nat, T(0),   [x : Nat, [x = 0]   -> Void, T(x - 1)] -> T(x)] -> T(n)
+// [n : Nat, T(MAX), [x : Nat, [x = MAX] -> Void, T(x + 1)] -> T(x)] -> T(n)
+
+    // Sigma type, constructor, and destructor
+    , EXPR_SIGMA
+    , EXPR_PACK
+    , EXPR_ACCESS
 } ExprTag;
 
 struct Expr {
@@ -88,25 +62,15 @@ struct Expr {
 
     ExprTag tag;
     union {
-        Literal literal;
         const char *ident;
-        struct {
-            BinaryOp op;
-            Expr *expr1;
-            Expr *expr2;
-        } bin_op;
-        struct {
-            Expr *predicate;
-            Expr *then_;
-            Expr *else_;
-        } ifthenelse;
+        // struct {} type;
 
         struct {
-            Expr *ret_type;
             size_t num_params;
             Expr *param_types;
             const char **param_names; // Values may be NULL if params not named.
-        } func_type;
+            Expr *ret_type;
+        } forall;
         struct {
             size_t num_params;
             Expr *param_types;
@@ -120,47 +84,81 @@ struct Expr {
         } call;
 
         struct {
-            size_t num_fields;
-            Expr *field_types;
-            const char **field_names;
-        } struct_;
+            Expr *expr1;
+            Expr *expr2;
+        } id;
+        Expr *reflexive;
+        struct {
+            Expr *proof;
+            Expr *family;
+            Expr *instance;
+        } substitute;
+
+        // struct {} void_;
+        struct {
+            Expr *void_instance;
+            Expr *into_type;
+        } explode;
+
+        // struct {} bool_;
+        bool boolean;
+        struct {
+            Expr *predicate;
+            Expr *then_;
+            Expr *else_;
+        } ifthenelse;
+
+        // struct {} nat;
+        uint64_t natural;
+        struct {
+            Expr *natural;
+            bool goes_down;
+            Expr *base_val;
+            const char *ind_name;
+            Expr *ind_val;
+        } nat_ind;
+
         struct {
             size_t num_fields;
+            const char **field_names; // May be NULL if params not named.
             Expr *field_types;
-            const char **field_names;
-        } union_;
+        } sigma;
         struct {
-            Expr *type;
-            size_t num_assigns;
-            const char **field_names;
-            Expr *assigns;
+            Expr *as_type; // May be NULL if fields are non-dependent
+            size_t num_fields;
+            Expr *field_values;
         } pack;
         struct {
             Expr *record;
-            const char *field;
-        } member;
-
-        // Same field for reference, dereference, and reflexive
-        Expr *pointer;
+            size_t num_fields;
+            const char **field_names;
+            Expr *in_expr;
+        } unpack;
+        struct {
+            Expr *record;
+            size_t field_num;
+        } access;
     };
 };
 
 #define literal_expr_type \
     ((Expr){ \
-          .tag = EXPR_LITERAL \
-        , .literal = (Literal){.tag = LIT_TYPE} \
-    })
-
-#define literal_expr_bool \
-    ((Expr){ \
-          .tag = EXPR_LITERAL \
-        , .literal = (Literal){.tag = LIT_BOOL} \
+          .tag = EXPR_TYPE \
     })
 
 #define literal_expr_void \
     ((Expr){ \
-          .tag = EXPR_LITERAL \
-        , .literal = (Literal){.tag = LIT_VOID} \
+          .tag = EXPR_VOID \
+    })
+
+#define literal_expr_bool \
+    ((Expr){ \
+          .tag = EXPR_BOOL \
+    })
+
+#define literal_expr_nat \
+    ((Expr){ \
+          .tag = EXPR_NAT \
     })
 
 void expr_free(Expr *expr);
@@ -181,7 +179,7 @@ void expr_free_vars(const Expr *expr, SymbolSet *set);
 
 /***** Top-Level Definitions *************************************************/
 typedef enum {
-      TOP_LEVEL_FUNC
+      TOP_LEVEL_EXPR_DECL
 } TopLevelTag;
 
 struct TopLevel {
@@ -191,12 +189,9 @@ struct TopLevel {
     TopLevelTag tag;
     union {
         struct {
-            Expr ret_type;
-            size_t num_params;
-            Expr *param_types;
-            const char **param_names;
-            Expr body;
-        } func;
+            Expr type;
+            Expr expr;
+        } expr_decl;
     };
 };
 
