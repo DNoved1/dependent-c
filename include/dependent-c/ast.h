@@ -11,6 +11,14 @@ typedef struct Block            Block;
 typedef struct TopLevel         TopLevel;
 typedef struct TranslationUnit  TranslationUnit;
 
+struct TranslationUnit {
+    size_t num_top_levels;
+    TopLevel *top_levels;
+};
+
+// Cyclical include problems...
+#include "dependent-c/general.h"
+
 /***** Location Information **************************************************/
 typedef struct {
     unsigned line;
@@ -18,7 +26,7 @@ typedef struct {
 } LocationInfo;
 
 /* For printing error messages. */
-void location_pprint(const char *file, const LocationInfo *info);
+void location_pprint(Context*, const char *file, const LocationInfo *info);
 
 /***** Expressions ***********************************************************/
 typedef enum {
@@ -155,21 +163,21 @@ struct Expr {
           .tag = EXPR_NAT \
     })
 
-void expr_free(Expr *expr);
-Expr expr_copy(const Expr *x);
+void expr_free(Context*, Expr *expr);
+Expr expr_copy(Context*, const Expr *x);
 
-void expr_pprint(FILE *to, const Expr *expr);
+void expr_pprint(Context*, FILE *to, const Expr *expr);
 
 /* Determine if two expressions are exactly equivalent. Does not take into
  * account alpha equivalence.
  */
-bool expr_equal(const Expr *x, const Expr *y);
+bool expr_equal(Context*, const Expr *x, const Expr *y);
 
 // Cyclical include problems...
 #include "dependent-c/symbol_table.h"
 
 /* Calculate the set of free variables in an expression. */
-void expr_free_vars(const Expr *expr, SymbolSet *set);
+void expr_free_vars(Context*, const Expr *expr, SymbolSet *set);
 
 /***** Top-Level Definitions *************************************************/
 typedef enum {
@@ -189,27 +197,18 @@ struct TopLevel {
     };
 };
 
-void top_level_free(TopLevel *top_level);
-void top_level_pprint(FILE *to, const TopLevel *top_level);
+void top_level_free(Context*, TopLevel *top_level);
+void top_level_pprint(Context*, FILE *to, const TopLevel *top_level);
 
 /***** Translation Units *****************************************************/
 
-struct TranslationUnit {
-    size_t num_top_levels;
-    TopLevel *top_levels;
-};
+// Declared above
 
-void translation_unit_free(TranslationUnit *unit);
-void translation_unit_pprint(FILE *to, const TranslationUnit *unit);
-
-
-
-// Cyclical include problems... again
-#include "dependent-c/general.h"
+void translation_unit_free(Context*, TranslationUnit *unit);
+void translation_unit_pprint(Context*, FILE *to, const TranslationUnit *unit);
 
 /* Substitute a variable in an expression for an expression. */
-void expr_subst(Context *context, Expr *expr,
-    const char *name, const Expr *replacement);
+void expr_subst(Context*, Expr *expr, const char *name, const Expr *replacement);
 
 /***** Specializations of printf *********************************************/
 
@@ -217,7 +216,7 @@ void expr_subst(Context *context, Expr *expr,
     ((const void*[]){__VA_ARGS__})
 
 #if __GNUC__
-__attribute__((__format__ (__printf__, 2, 4)))
+__attribute__((__format__ (__printf__, 3, 5)))
 #endif
 
 /* 'e' for extended.
@@ -237,6 +236,9 @@ __attribute__((__format__ (__printf__, 2, 4)))
  * Expr expr2 = expr_literal_bool;
  * efprintf(stderr, "($e) does not equal ($e).\n", (void*[]){&expr1, &expr2});
  */
-void efprintf(FILE *file, const char *format, const void *eargs[], ...);
+void efprintf(Context*, FILE *file, const char *format, const void *eargs[], ...);
+
+// Cyclical include dependencies...
+void symbol_table_pprint(Context *ctx, FILE *to, const SymbolTable *symbols);
 
 #endif /* DEPENDENT_C_AST */

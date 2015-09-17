@@ -276,7 +276,7 @@ bool symbol_table_lookup_define(SymbolTable *symbols,
     return false;
 }
 
-void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
+void symbol_table_pprint(Context *ctx, FILE *to, const SymbolTable *symbols) {
     fprintf(to, "Global Symbols\n");
 
     size_t max_name_len = 0;
@@ -297,7 +297,7 @@ void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
         }
 
         fprintf(to, " => ");
-        expr_pprint(to, &symbols->global_types[i]);
+        expr_pprint(ctx, to, &symbols->global_types[i]);
         putc('\n', to);
         if (symbols->global_defined[i]) {
             fprintf(to, "    ");
@@ -305,7 +305,7 @@ void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
                 putc(' ', to);
             }
             fprintf(to, " := ");
-            expr_pprint(to, &symbols->global_defines[i]);
+            expr_pprint(ctx, to, &symbols->global_defines[i]);
             putc('\n', to);
         }
     }
@@ -334,7 +334,7 @@ void symbol_table_pprint(FILE *to, const SymbolTable *symbols) {
             }
 
             fprintf(to, " => ");
-            expr_pprint(to, &symbols->locals_stack[i].local_types[j]);
+            expr_pprint(ctx, to, &symbols->locals_stack[i].local_types[j]);
             fprintf(to, "\n");
         }
     }

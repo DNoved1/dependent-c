@@ -67,7 +67,7 @@ bool symbol_table_lookup_define(SymbolTable *symbols,
     const char *name, Expr *result);
 
 /* Print the contents of the symbol table. */
-void symbol_table_pprint(FILE *to, const SymbolTable *symbols);
+//void symbol_table_pprint(Context *ctx, FILE *to, const SymbolTable *symbols);
 
 /***** Symbol Sets ***********************************************************/
 

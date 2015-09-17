@@ -279,7 +279,8 @@ top_level_:
         alloc_array($$.expr_decl.type.forall.param_types, $params.len);
         alloc_array($$.expr_decl.type.forall.param_names, $params.len);
         for (size_t i = 0; i < $params.len; i++) {
-            $$.expr_decl.type.forall.param_types[i] = expr_copy(&$params.types[i]);
+            $$.expr_decl.type.forall.param_types[i] = expr_copy(
+                context, &$params.types[i]);
             $$.expr_decl.type.forall.param_names[i] = $params.idents[i];
         }
         alloc_assign($$.expr_decl.type.forall.ret_type, $ret_type);

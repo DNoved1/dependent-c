@@ -27,6 +27,6 @@ void context_free(Context *context) {
     token_stream_free(&context->tokens);
     symbol_free_all(&context->interns);
     symbol_table_free(&context->symbol_table);
-    translation_unit_free(&context->ast);
+    translation_unit_free(context, &context->ast);
     memset(context, 0, sizeof *context);
 }
