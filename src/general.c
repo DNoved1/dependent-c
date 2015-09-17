@@ -1,10 +1,7 @@
 #include <string.h>
 
-#include "dependent-c/ast.h"
 #include "dependent-c/general.h"
-#include "dependent-c/lex.h"
 #include "dependent-c/memory.h"
-#include "dependent-c/symbol_table.h"
 
 Context context_new(const char *source_name, CharStream source) {
     char *source_name_copy;

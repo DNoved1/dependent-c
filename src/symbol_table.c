@@ -1,9 +1,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include "dependent-c/ast.h"
+#include "dependent-c/general.h"
 #include "dependent-c/memory.h"
-#include "dependent-c/symbol_table.h"
 
 /***** Symbol Interning ******************************************************/
 static size_t size_t_min(size_t x, size_t y) {

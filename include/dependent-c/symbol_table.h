@@ -1,9 +1,7 @@
 #ifndef DEPENDENT_C_SYMBOL_TABLE_H
 #define DEPENDENT_C_SYMBOL_TABLE_H
 
-#include <stddef.h>
-
-#include "dependent-c/ast.h"
+struct Context;
 
 /***** Symbol Interning ******************************************************/
 
@@ -67,7 +65,8 @@ bool symbol_table_lookup_define(SymbolTable *symbols,
     const char *name, Expr *result);
 
 /* Print the contents of the symbol table. */
-//void symbol_table_pprint(Context *ctx, FILE *to, const SymbolTable *symbols);
+void symbol_table_pprint(struct Context *ctx, FILE *to,
+    const SymbolTable *symbols);
 
 /***** Symbol Sets ***********************************************************/
 

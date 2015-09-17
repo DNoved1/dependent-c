@@ -1,12 +1,8 @@
 %{
 #include <ctype.h>  /* isspace, isalpha, isalnum, isdigit */
-#include <stdbool.h> /* true, false */
-#include <stdint.h> /* unint64_t */
 #include <string.h> /* strcmp */
 
-#include "dependent-c/ast.h"
 #include "dependent-c/general.h"
-#include "dependent-c/lex.h"
 #include "dependent-c/memory.h"
 %}
 

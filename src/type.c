@@ -1,14 +1,9 @@
 #include <assert.h>
 #include <inttypes.h>
-#include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 
-#include "dependent-c/ast.h"
 #include "dependent-c/general.h"
 #include "dependent-c/memory.h"
-#include "dependent-c/symbol_table.h"
-#include "dependent-c/type.h"
 
 /***** Type Checking / Inference *********************************************/
 bool type_check(Context *ctx, const Expr *expr, const Expr *type) {

@@ -1,13 +1,9 @@
 #include <assert.h>
 #include <inttypes.h>
-#include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 
-#include "dependent-c/ast.h"
 #include "dependent-c/general.h"
 #include "dependent-c/memory.h"
-#include "dependent-c/symbol_table.h"
 
 /***** Expression Management *************************************************/
 bool expr_equal(Context *ctx, const Expr *x, const Expr *y) {

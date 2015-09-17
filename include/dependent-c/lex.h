@@ -1,8 +1,6 @@
 #ifndef DEPENDENT_C_LEX
 #define DEPENDENT_C_LEX
 
-#include <stdio.h>
-
 /* A stream of characters terminated with EOF. */
 typedef struct {
     int (*next)(void *self_data);
