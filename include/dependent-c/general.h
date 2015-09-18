@@ -21,6 +21,9 @@ struct Context {
     InternedSymbols interns;
     SymbolTable symbol_table;
     TranslationUnit ast;
+
+    /* Whether or not to use color when printing to the terminal. */
+    bool color_enabled;
 };
 
 Context context_new(const char *source_name, CharStream source);

@@ -7,6 +7,7 @@ int yyparse(Context *);
 
 int main(void) {
     Context ctx = context_new("<stdin>", file_to_char_stream(stdin));
+    ctx.color_enabled = true;
     int ret_value = EXIT_SUCCESS;
 
     if (yyparse(&ctx) == 0) {

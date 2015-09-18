@@ -16,6 +16,7 @@ Context context_new(const char *source_name, CharStream source) {
         , .interns = symbol_new()
         , .symbol_table = symbol_table_new()
         , .ast = (TranslationUnit){0}
+        , .color_enabled = false
     };
 }
 

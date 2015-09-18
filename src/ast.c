@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "dependent-c/color.h"
 #include "dependent-c/general.h"
 #include "dependent-c/memory.h"
 
@@ -747,12 +748,38 @@ static void expr_pprint_(Context *ctx, FILE *to, const Expr *expr) {
 
 
 void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
-#define tag_to_string(tag, str) case tag: fprintf(to, str); break;
     switch (expr->tag) {
-      tag_to_string(EXPR_TYPE, "Type")
-      tag_to_string(EXPR_VOID, "Void")
-      tag_to_string(EXPR_BOOL, "Bool")
-      tag_to_string(EXPR_NAT,  "Nat")
+      case EXPR_TYPE:
+        if (ctx->color_enabled) {
+            fprintf(to, CYAN "Type" NORMAL);
+        } else {
+            fprintf(to, "Type");
+        }
+        break;
+
+      case EXPR_VOID:
+        if (ctx->color_enabled) {
+            fprintf(to, CYAN "Void" NORMAL);
+        } else {
+            fprintf(to, "Void");
+        }
+        break;
+
+      case EXPR_BOOL:
+        if (ctx->color_enabled) {
+            fprintf(to, CYAN "Bool" NORMAL);
+        } else {
+            fprintf(to, "Bool");
+        }
+        break;
+
+      case EXPR_NAT:
+        if (ctx->color_enabled) {
+            fprintf(to, CYAN "Nat" NORMAL);
+        } else {
+            fprintf(to, "Nat");
+        }
+        break;
 
       case EXPR_IDENT:
         fprintf(to, "%s", expr->ident);
@@ -764,27 +791,50 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
-            if (expr->forall.param_names[i] == NULL) {
-                efprintf(ctx, to, "$e", ewrap(&expr->forall.param_types[i]));
-            } else {
-                efprintf(ctx, to, "%s : $e", ewrap(&expr->forall.param_types[i]),
-                    expr->forall.param_names[i]);
+            if (expr->forall.param_names[i] != NULL) {
+                fprintf(to, "%s ", expr->forall.param_names[i]);
+                if (ctx->color_enabled) {
+                    fprintf(to, RED ":" NORMAL " ");
+                } else {
+                    fprintf(to, ": ");
+                }
             }
+            expr_pprint(ctx, to, &expr->forall.param_types[i]);
         }
-        efprintf(ctx, to, "] -> $e", ewrap(expr->forall.ret_type));
+        fprintf(to, "] ");
+        if (ctx->color_enabled) {
+            fprintf(to, RED "->" NORMAL " ");
+        } else {
+            fprintf(to, "-> ");
+        }
+        expr_pprint(ctx, to, expr->forall.ret_type);
         break;
 
       case EXPR_LAMBDA:
-        fprintf(to, "\\(");
+        if (ctx->color_enabled) {
+            fprintf(to, RED "λ" NORMAL "(");
+        } else {
+            fprintf(to, "\\(");
+        }
         for (size_t i = 0; i < expr->lambda.num_params; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
-
-            efprintf(ctx, to, "%s : $e", ewrap(&expr->lambda.param_types[i]),
-                expr->lambda.param_names[i]);
+            fprintf(to, "%s ", expr->lambda.param_names[i]);
+            if (ctx->color_enabled) {
+                fprintf(to, RED ":" NORMAL " ");
+            } else {
+                fprintf(to, ": ");
+            }
+            expr_pprint(ctx, to, &expr->lambda.param_types[i]);
         }
-        efprintf(ctx, to, ") => $e", ewrap(expr->lambda.body));
+        fprintf(to, ") ");
+        if (ctx->color_enabled) {
+            fprintf(to, RED "=>" NORMAL " ");
+        } else {
+            fprintf(to, "=> ");
+        }
+        expr_pprint(ctx, to, expr->lambda.body);
         break;
 
       case EXPR_CALL:
@@ -818,30 +868,53 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
         break;
 
       case EXPR_BOOLEAN:
-        fprintf(to, "%s", expr->boolean ? "true" : "false");
+        if (ctx->color_enabled) {
+            fprintf(to, CYAN "%s" NORMAL, expr->boolean ? "true" : "false");
+        } else {
+            fprintf(to, "%s", expr->boolean ? "true" : "false");
+        }
         break;
 
       case EXPR_IFTHENELSE:
-        efprintf(ctx, to, "if $e then $e else $e", ewrap(
-            expr->ifthenelse.predicate,
-            expr->ifthenelse.then_,
-            expr->ifthenelse.else_));
+        if (ctx->color_enabled) {
+            efprintf(ctx, to, RED "if" NORMAL " $e " RED "then" NORMAL
+                " $e " RED "else" NORMAL " $e", ewrap(
+                expr->ifthenelse.predicate,
+                expr->ifthenelse.then_,
+                expr->ifthenelse.else_));
+        } else {
+            efprintf(ctx, to, "if $e then $e else $e", ewrap(
+                expr->ifthenelse.predicate,
+                expr->ifthenelse.then_,
+                expr->ifthenelse.else_));
+        }
         break;
 
       case EXPR_NATURAL:
-        fprintf(to, "%" PRIu64, expr->natural);
+        if (ctx->color_enabled) {
+            fprintf(to, CYAN "%" PRIu64 NORMAL, expr->natural);
+        } else {
+            fprintf(to, "%" PRIu64, expr->natural);
+        }
         break;
 
       case EXPR_NAT_IND:
-        efprintf(ctx, to, "case $e of\n", ewrap(expr->nat_ind.natural));
-        if (expr->nat_ind.goes_down) {
-            efprintf(ctx, to, "    | 0 => $e\n", ewrap(expr->nat_ind.base_val));
-            efprintf(ctx, to, "    | %s + 1 => $e", ewrap(expr->nat_ind.ind_val),
-                expr->nat_ind.ind_name);
+        if (ctx->color_enabled) {
+            efprintf(ctx, to, RED "case" NORMAL " $e " RED "of" NORMAL "\n",
+                ewrap(expr->nat_ind.natural));
+            efprintf(ctx, to, "    | " CYAN "%s" NORMAL " " RED "=>" NORMAL
+                " $e\n", ewrap(expr->nat_ind.base_val),
+                expr->nat_ind.goes_down ? "0" : "NAT_MAX");
+            efprintf(ctx, to, "    | %s %c " CYAN "1" NORMAL " " RED "=>" NORMAL
+                " $e", ewrap(expr->nat_ind.ind_val), expr->nat_ind.ind_name,
+                expr->nat_ind.goes_down ? '+' : '-');
         } else {
-            efprintf(ctx, to, "    | NAT_MAX => $e\n", ewrap(expr->nat_ind.base_val));
-            efprintf(ctx, to, "    | %s - 1 => $e", ewrap(expr->nat_ind.ind_val),
-                expr->nat_ind.ind_name);
+            efprintf(ctx, to, "case $e of\n", ewrap(expr->nat_ind.natural));
+            efprintf(ctx, to, "    | %s => $e\n", ewrap(expr->nat_ind.base_val),
+                expr->nat_ind.goes_down ? "0" : "NAT_MAX");
+            efprintf(ctx, to, "    | %s %c 1 => $e",
+                ewrap(expr->nat_ind.ind_val), expr->nat_ind.ind_name,
+                expr->nat_ind.goes_down ? '+' : '-');
         }
         break;
 
@@ -852,7 +925,12 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
                 fprintf(to, ", ");
             }
             if (expr->sigma.field_names[i] != NULL) {
-                fprintf(to, "%s : ", expr->sigma.field_names[i]);
+                fprintf(to, "%s ", expr->sigma.field_names[i]);
+                if (ctx->color_enabled) {
+                    fprintf(to, RED ":" NORMAL " ");
+                } else {
+                    fprintf(to, ": ");
+                }
             }
             expr_pprint(ctx, to, &expr->sigma.field_types[i]);
         }
@@ -872,25 +950,40 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
         }
         putc('>', to);
         if (expr->pack.as_type != NULL) {
-            efprintf(ctx, to, " : $e)", ewrap(expr->pack.as_type));
+            if (ctx->color_enabled) {
+                fprintf(to, " " RED ":" NORMAL);
+            } else {
+                fprintf(to, " :");
+            }
+            efprintf(ctx, to, " $e)", ewrap(expr->pack.as_type));
         }
         break;
 
       case EXPR_ACCESS:
-        efprintf(ctx, to, "$(e[%zu]", ewrap(expr->access.record),
-            expr->access.field_num);
+        if (ctx->color_enabled) {
+            efprintf(ctx, to, "$(e[" CYAN "%zu" NORMAL "]",
+                ewrap(expr->access.record), expr->access.field_num);
+        } else {
+            efprintf(ctx, to, "$(e[%zu]",
+                ewrap(expr->access.record), expr->access.field_num);
+        }
         break;
     }
-#undef tag_to_string
 }
 
 void top_level_pprint(Context *ctx, FILE *to, const TopLevel *top_level) {
     switch (top_level->tag) {
        case TOP_LEVEL_EXPR_DECL:
-        efprintf(ctx, to, "%s : $e\n", ewrap(&top_level->expr_decl.type),
-            top_level->name);
-        efprintf(ctx, to, "%s = $e\n", ewrap(&top_level->expr_decl.expr),
-            top_level->name);
+        if (ctx->color_enabled) {
+            efprintf(ctx, to, "%s " RED ":" NORMAL " $e\n"
+                "%s " RED "=" NORMAL " $e\n",
+                ewrap(&top_level->expr_decl.type, &top_level->expr_decl.expr),
+                top_level->name, top_level->name);
+        } else {
+            efprintf(ctx, to, "%s : $e\n%s = $e\n",
+                ewrap(&top_level->expr_decl.type, &top_level->expr_decl.expr),
+                top_level->name, top_level->name);
+        }
         break;
     }
 }
