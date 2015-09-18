@@ -12,7 +12,7 @@ void location_pprint(struct Context*, const char *file, const LocationInfo *info
 void expr_free(struct Context*, Expr *expr);
 Expr expr_copy(struct Context*, const Expr *x);
 
-void expr_pprint(struct Context*, FILE *to, const Expr *expr);
+void expr_pprint(struct Context*, FILE *to, unsigned indent, const Expr *expr);
 
 /* Determine if two expressions are exactly equivalent. Does not take into
  * account alpha equivalence.

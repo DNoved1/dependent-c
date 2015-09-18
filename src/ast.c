@@ -728,12 +728,19 @@ void translation_unit_free(Context *ctx, TranslationUnit *unit) {
 }
 
 /***** Pretty-printing ast nodes *********************************************/
+static void indent_pprint(FILE *to, unsigned indent) {
+    for (unsigned i = 0; i < indent; i++) {
+        fprintf(to, "    ");
+    }
+}
+
 void location_pprint(Context *ctx, const char *file, const LocationInfo *info) {
     fprintf(stderr, "    At file %s, line %u, column %u.\n",
         file, info->line, info->column);
 }
 
-static void expr_pprint_(Context *ctx, FILE *to, const Expr *expr) {
+static void expr_pprint_(Context *ctx, FILE *to, unsigned indent,
+        const Expr *expr) {
     bool simple = expr->tag == EXPR_IDENT
             || expr->tag == EXPR_TYPE
             || expr->tag == EXPR_VOID
@@ -742,12 +749,12 @@ static void expr_pprint_(Context *ctx, FILE *to, const Expr *expr) {
             || expr->tag == EXPR_SIGMA || expr->tag == EXPR_PACK;
 
     if (!simple) putc('(', to);
-    expr_pprint(ctx, to, expr);
+    expr_pprint(ctx, to, indent, expr);
     if (!simple) putc(')', to);
 }
 
 
-void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
+void expr_pprint(Context *ctx, FILE *to, unsigned indent, const Expr *expr) {
     switch (expr->tag) {
       case EXPR_TYPE:
         if (ctx->color_enabled) {
@@ -799,7 +806,7 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
                     fprintf(to, ": ");
                 }
             }
-            expr_pprint(ctx, to, &expr->forall.param_types[i]);
+            expr_pprint(ctx, to, indent, &expr->forall.param_types[i]);
         }
         fprintf(to, "] ");
         if (ctx->color_enabled) {
@@ -807,7 +814,7 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
         } else {
             fprintf(to, "-> ");
         }
-        expr_pprint(ctx, to, expr->forall.ret_type);
+        expr_pprint(ctx, to, indent, expr->forall.ret_type);
         break;
 
       case EXPR_LAMBDA:
@@ -826,7 +833,7 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
             } else {
                 fprintf(to, ": ");
             }
-            expr_pprint(ctx, to, &expr->lambda.param_types[i]);
+            expr_pprint(ctx, to, indent, &expr->lambda.param_types[i]);
         }
         fprintf(to, ") ");
         if (ctx->color_enabled) {
@@ -834,17 +841,17 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
         } else {
             fprintf(to, "=> ");
         }
-        expr_pprint(ctx, to, expr->lambda.body);
+        expr_pprint(ctx, to, indent, expr->lambda.body);
         break;
 
       case EXPR_CALL:
-        efprintf(ctx, to, "$(e(", ewrap(expr->call.func));
+        expr_pprint_(ctx, to, indent, expr->call.func);
+        putc('(', to);
         for (size_t i = 0; i < expr->call.num_args; i++) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
-
-            expr_pprint(ctx, to, &expr->call.args[i]);
+            expr_pprint(ctx, to, indent, &expr->call.args[i]);
         }
         putc(')', to);
         break;
@@ -877,16 +884,27 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
 
       case EXPR_IFTHENELSE:
         if (ctx->color_enabled) {
-            efprintf(ctx, to, RED "if" NORMAL " $e " RED "then" NORMAL
-                " $e " RED "else" NORMAL " $e", ewrap(
-                expr->ifthenelse.predicate,
-                expr->ifthenelse.then_,
-                expr->ifthenelse.else_));
+            fprintf(to, RED "if" NORMAL " ");
+            expr_pprint(ctx, to, indent, expr->ifthenelse.predicate);
+            putc('\n', to); indent_pprint(to, indent);
+            indent_pprint(to, indent + 1);
+            fprintf(to, RED "then" NORMAL " ");
+            expr_pprint(ctx, to, indent + 1, expr->ifthenelse.then_);
+            putc('\n', to); indent_pprint(to, indent);
+            indent_pprint(to, indent + 1);
+            fprintf(to, RED "else" NORMAL " ");
+            expr_pprint(ctx, to, indent + 1, expr->ifthenelse.else_);
         } else {
-            efprintf(ctx, to, "if $e then $e else $e", ewrap(
-                expr->ifthenelse.predicate,
-                expr->ifthenelse.then_,
-                expr->ifthenelse.else_));
+            fprintf(to, "if ");
+            expr_pprint(ctx, to, indent, expr->ifthenelse.predicate);
+            putc('\n', to); indent_pprint(to, indent);
+            indent_pprint(to, indent + 1);
+            fprintf(to, "then ");
+            expr_pprint(ctx, to, indent + 1, expr->ifthenelse.then_);
+            putc('\n', to); indent_pprint(to, indent);
+            indent_pprint(to, indent + 1);
+            fprintf(to, RED "else ");
+            expr_pprint(ctx, to, indent + 1, expr->ifthenelse.else_);
         }
         break;
 
@@ -900,22 +918,30 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
 
       case EXPR_NAT_IND:
         if (ctx->color_enabled) {
-            efprintf(ctx, to, RED "case" NORMAL " $e " RED "of" NORMAL "\n",
-                ewrap(expr->nat_ind.natural));
-            efprintf(ctx, to, "    | " CYAN "%s" NORMAL " " RED "=>" NORMAL
-                " $e\n", ewrap(expr->nat_ind.base_val),
+            fprintf(to, RED "case" NORMAL " ");
+            expr_pprint(ctx, to, indent, expr->nat_ind.natural);
+            fprintf(to, " " RED "of" NORMAL "\n");
+            indent_pprint(to, indent + 1);
+            fprintf(to, "| " CYAN "%s" NORMAL " " RED "=>" NORMAL " ",
                 expr->nat_ind.goes_down ? "0" : "NAT_MAX");
-            efprintf(ctx, to, "    | %s %c " CYAN "1" NORMAL " " RED "=>" NORMAL
-                " $e", ewrap(expr->nat_ind.ind_val), expr->nat_ind.ind_name,
-                expr->nat_ind.goes_down ? '+' : '-');
+            expr_pprint(ctx, to, indent + 1, expr->nat_ind.base_val);
+            putc('\n', to); indent_pprint(to, indent + 1);
+            fprintf(to, "| %s %c " CYAN "1" NORMAL " " RED "=>" NORMAL " ",
+                expr->nat_ind.ind_name, expr->nat_ind.goes_down ? '+' : '-');
+            expr_pprint(ctx, to, indent + 1, expr->nat_ind.ind_val);
         } else {
-            efprintf(ctx, to, "case $e of\n", ewrap(expr->nat_ind.natural));
-            efprintf(ctx, to, "    | %s => $e\n", ewrap(expr->nat_ind.base_val),
+            fprintf(to, "case ");
+            expr_pprint(ctx, to, indent, expr->nat_ind.natural);
+            fprintf(to, " of\n");
+            indent_pprint(to, indent + 1);
+            fprintf(to, "| %s => ",
                 expr->nat_ind.goes_down ? "0" : "NAT_MAX");
-            efprintf(ctx, to, "    | %s %c 1 => $e",
-                ewrap(expr->nat_ind.ind_val), expr->nat_ind.ind_name,
-                expr->nat_ind.goes_down ? '+' : '-');
-        }
+            expr_pprint(ctx, to, indent + 1, expr->nat_ind.base_val);
+            putc('\n', to); indent_pprint(to, indent + 1);
+            fprintf(to, "| %s %c 1 => ",
+                expr->nat_ind.ind_name, expr->nat_ind.goes_down ? '+' : '-');
+            expr_pprint(ctx, to, indent + 1, expr->nat_ind.ind_val);
+       }
         break;
 
       case EXPR_SIGMA:
@@ -932,7 +958,7 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
                     fprintf(to, ": ");
                 }
             }
-            expr_pprint(ctx, to, &expr->sigma.field_types[i]);
+            expr_pprint(ctx, to, indent, &expr->sigma.field_types[i]);
         }
         putc('}', to);
         break;
@@ -946,7 +972,7 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
             if (i > 0) {
                 fprintf(to, ", ");
             }
-            expr_pprint(ctx, to, &expr->pack.field_values[i]);
+            expr_pprint(ctx, to, indent, &expr->pack.field_values[i]);
         }
         putc('>', to);
         if (expr->pack.as_type != NULL) {
@@ -955,17 +981,18 @@ void expr_pprint(Context *ctx, FILE *to, const Expr *expr) {
             } else {
                 fprintf(to, " :");
             }
-            efprintf(ctx, to, " $e)", ewrap(expr->pack.as_type));
+            putc(' ', to);
+            expr_pprint(ctx, to, indent, expr->pack.as_type);
+            putc(')', to);
         }
         break;
 
       case EXPR_ACCESS:
+        expr_pprint_(ctx, to, indent, expr->access.record);
         if (ctx->color_enabled) {
-            efprintf(ctx, to, "$(e[" CYAN "%zu" NORMAL "]",
-                ewrap(expr->access.record), expr->access.field_num);
+            fprintf(to, "[" CYAN "%zu" NORMAL "]", expr->access.field_num);
         } else {
-            efprintf(ctx, to, "$(e[%zu]",
-                ewrap(expr->access.record), expr->access.field_num);
+            fprintf(to, "[%zu]", expr->access.field_num);
         }
         break;
     }
@@ -1024,7 +1051,7 @@ void efprintf(Context *ctx, FILE *file,
                 break;
 
               case 'e':
-                expr_pprint(ctx, file, (Expr*)*eargs);
+                expr_pprint(ctx, file, 0, (Expr*)*eargs);
                 eargs += 1;
                 break;
 
@@ -1032,7 +1059,7 @@ void efprintf(Context *ctx, FILE *file,
                 i += 1;
                 switch (format_copy[i]) {
                   case 'e':
-                    expr_pprint_(ctx, file, (Expr*)*eargs);
+                    expr_pprint_(ctx, file, 0, (Expr*)*eargs);
                     eargs += 1;
                     break;
 

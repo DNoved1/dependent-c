@@ -295,17 +295,13 @@ void symbol_table_pprint(Context *ctx, FILE *to, const SymbolTable *symbols) {
             }
         }
 
-        fprintf(to, " => ");
-        expr_pprint(ctx, to, &symbols->global_types[i]);
-        putc('\n', to);
+        efprintf(ctx, to, " => $e\n", ewrap(&symbols->global_types[i]));
         if (symbols->global_defined[i]) {
             fprintf(to, "    ");
             for (size_t j = 0; j < max_name_len; j++) {
                 putc(' ', to);
             }
-            fprintf(to, " := ");
-            expr_pprint(ctx, to, &symbols->global_defines[i]);
-            putc('\n', to);
+            efprintf(ctx, to, " := $e\n", ewrap(&symbols->global_defines[i]));
         }
     }
 
@@ -332,9 +328,8 @@ void symbol_table_pprint(Context *ctx, FILE *to, const SymbolTable *symbols) {
                 }
             }
 
-            fprintf(to, " => ");
-            expr_pprint(ctx, to, &symbols->locals_stack[i].local_types[j]);
-            fprintf(to, "\n");
+            efprintf(ctx, to, " => $e\n",
+                ewrap(&symbols->locals_stack[i].local_types[j]));
         }
     }
 }
