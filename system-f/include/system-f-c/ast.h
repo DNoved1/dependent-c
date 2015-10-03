@@ -29,6 +29,8 @@ namespace ast {
 
         std::unordered_set<std::string> free_vars(const Expr& expr);
         void subst(Expr& expr, const std::string& name, const Expr& with);
+        bool alpha_eq(const Expr& expr1, const Expr& expr2);
+        std::ostream& operator<<(std::ostream& os, const Expr& expr);
     }
 
     struct MaybeNamedType {
