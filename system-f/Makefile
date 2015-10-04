@@ -1,5 +1,5 @@
 OBJECTS = $(addprefix bin/, \
-	ast.o \
+	ast.o context.o \
 	)
 
 CXXFLAGS = -g -O0 -std=c++14 -pedantic -Wall -Werror -Iinclude
