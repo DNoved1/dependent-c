@@ -9,6 +9,10 @@
 #include <unordered_set>
 #include <vector>
 
+namespace context {
+    class Context;
+}
+
 namespace ast {
 
     namespace expr {
@@ -27,10 +31,26 @@ namespace ast {
             , boost::recursive_wrapper<Call>
             > Expr;
 
+
         std::unordered_set<std::string> free_vars(const Expr& expr);
         void subst(Expr& expr, const std::string& name, const Expr& with);
         bool alpha_eq(const Expr& expr1, const Expr& expr2);
         std::ostream& operator<<(std::ostream& os, const Expr& expr);
+
+        /* Check if an expression is a valid kind. */
+        bool sort_infer(context::Context& context, const Expr& expr);
+
+        /* Check if an expression is a valid type and, if so, determine its
+         * kind.
+         */
+        boost::optional<Expr> kind_infer(context::Context& context,
+            const Expr& expr);
+
+        /* Check if an expression is a valid term and, if so, determine its
+         * type.
+         */
+        boost::optional<Expr> type_infer(context::Context& context,
+            const Expr& expr);
     }
 
     struct MaybeNamedType {

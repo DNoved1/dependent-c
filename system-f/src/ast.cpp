@@ -1,19 +1,43 @@
 #include "system-f-c/ast.h"
+#include "system-f-c/context.h"
 #include "system-f-c/util.h"
+
+#include <boost/variant/get.hpp>
 
 using std::ostream;
 using std::string;
 using std::unordered_set;
+using std::vector;
 
-using boost::static_visitor;
 using boost::apply_visitor;
+using boost::strict_get;
+using boost::optional;
+using boost::static_visitor;
 
+using context::Context;
+using context::ContextMarker;
 using util::set_contains;
 using util::set_union;
 
 namespace ast {
 
 namespace expr {
+
+/***** Check an Expression's Constructor *************************************/
+struct IsForallVisitor : public static_visitor<bool> {
+    bool operator()(const Forall& forall) const {
+        return true;
+    }
+
+    template <typename T>
+    bool operator()(const T& expr) const {
+        return false;
+    }
+};
+
+bool is_forall(const Expr& expr) {
+    return apply_visitor(IsForallVisitor(), expr);
+}
 
 /***** Free Variable Set *****************************************************/
 unordered_set<string> free_vars(const Ident& ident) {
@@ -366,6 +390,252 @@ struct PPrintVisitor /*: public static_visitor<ostream&>*/ {
 
 ostream& operator<<(ostream& os, const Expr& expr) {
     return apply_visitor(PPrintVisitor(os), expr);
+}
+
+/***** Sort Checking *********************************************************/
+bool sort_infer(Context& context, const Ident& ident) {
+    return false;
+}
+
+bool sort_infer(Context& context, const Type& type) {
+    return true;
+}
+
+bool sort_infer(Context& context, const Forall& forall) {
+    for (const MaybeNamedType& param : forall.params) {
+        if (!sort_infer(context, param.type)) {
+            return false;
+        }
+    }
+
+    return sort_infer(context, forall.return_type);
+}
+
+bool sort_infer(Context& context, const Lambda& lambda) {
+    return false;
+}
+
+bool sort_infer(Context& context, const Call& call) {
+    return false;
+}
+
+struct SortInferVisitor : public static_visitor<bool> {
+    Context& context;
+
+    SortInferVisitor(Context& context) : context(context) {}
+
+    template <typename T>
+    bool operator()(const T& expr) const {
+        return sort_infer(context, expr);
+    }
+};
+
+bool sort_infer(Context& context, const Expr& expr) {
+    return apply_visitor(SortInferVisitor(context), expr);
+}
+
+/***** Kind Checking *********************************************************/
+optional<Expr> kind_infer(Context& context, const Ident& ident) {
+    return context.lookup_type(ident.ident);
+}
+
+optional<Expr> kind_infer(Context& context, const Type& type) {
+    return optional<Expr>();
+}
+
+optional<Expr> kind_infer(Context& context, const Forall& forall) {
+    ContextMarker mark = context.mark();
+
+    for (const MaybeNamedType& param : forall.params) {
+        if (sort_infer(context, param.type)) {
+            if (param.name) {
+                context.register_type(param.name.get(), param.type);
+            }
+            continue;
+        }
+
+        if (kind_infer(context, param.type)) {
+            continue;
+        }
+
+        context.reset(mark);
+        return optional<Expr>();
+    }
+
+    bool valid = (bool)kind_infer(context, forall.return_type);
+    context.reset(mark);
+    if (valid) {
+        return optional<Expr>(Type());
+    } else {
+        return optional<Expr>();
+    }
+}
+
+optional<Expr> kind_infer(Context& context, const Lambda& lambda) {
+    ContextMarker mark = context.mark();
+
+    for (const NamedType& param : lambda.params) {
+        if (sort_infer(context, param.type)) {
+            context.register_type(param.name, param.type);
+            continue;
+        }
+
+        context.reset(mark);
+        return optional<Expr>();
+    }
+
+    optional<Expr> return_kind = kind_infer(context, lambda.body);
+    context.reset(mark);
+    if (!return_kind) {
+        return optional<Expr>();
+    }
+
+    vector<MaybeNamedType> kind_params;
+    for (const NamedType& param : lambda.params) {
+        kind_params.push_back(MaybeNamedType(param.type));
+    }
+
+    return optional<Expr>(Forall(kind_params, return_kind.get()));
+}
+
+optional<Expr> kind_infer(Context& context, const Call& call) {
+    optional<Expr> func_kind_ = kind_infer(context, call.func);
+    if (!func_kind_ || !is_forall(func_kind_.get())) {
+        return optional<Expr>();
+    }
+
+    Forall& func_kind = strict_get<Forall>(func_kind_.get());
+
+    if (func_kind.params.size() != call.args.size()) {
+        return optional<Expr>();
+    }
+
+    for (size_t i = 0; i < func_kind.params.size(); i++) {
+        optional<Expr> arg_kind = kind_infer(context, call.args[i]);
+        if (!arg_kind || !alpha_eq(func_kind.params[i].type, arg_kind.get())) {
+            return optional<Expr>();
+        }
+    }
+
+    return optional<Expr>(func_kind.return_type);
+}
+
+struct KindInferVisitor : public static_visitor<optional<Expr>> {
+    Context& context;
+
+    KindInferVisitor(Context& context) : context(context) {}
+
+    template <typename T>
+    optional<Expr> operator()(const T& expr) const {
+        return kind_infer(context, expr);
+    }
+};
+
+optional<Expr> kind_infer(Context& context, const Expr& expr) {
+    return apply_visitor(KindInferVisitor(context), expr);
+}
+
+/***** Type Checking *********************************************************/
+optional<Expr> type_infer(Context& context, const Ident& ident) {
+    return context.lookup_term(ident.ident);
+}
+
+optional<Expr> type_infer(Context& context, const Type& type) {
+    return optional<Expr>();
+}
+
+optional<Expr> type_infer(Context& context, const Forall& forall) {
+    return optional<Expr>();
+}
+
+optional<Expr> type_infer(Context& context, const Lambda& lambda) {
+    ContextMarker mark = context.mark();
+
+    for (const NamedType& param : lambda.params) {
+        if (sort_infer(context, param.type)) {
+            context.register_type(param.name, param.type);
+            continue;
+        }
+
+        if (kind_infer(context, param.type)) {
+            context.register_term(param.name, param.type);
+            continue;
+        }
+
+        context.reset(mark);
+        return optional<Expr>();
+    }
+
+    optional<Expr> body_type = type_infer(context, lambda.body);
+    context.reset(mark);
+    if (!body_type) {
+        return optional<Expr>();
+    }
+
+    vector<MaybeNamedType> type_kind_params;
+    for (const NamedType& param : lambda.params) {
+        // TODO: We only need to put the name if it's a kind.
+        type_kind_params.push_back(MaybeNamedType(param.name, param.type));
+    }
+
+    return optional<Expr>(Forall(type_kind_params, body_type.get()));
+}
+
+optional<Expr> type_infer(Context& context, const Call& call) {
+    optional<Expr> func_type_ = type_infer(context, call.func);
+    if (!func_type_ || !is_forall(func_type_.get())) {
+        return optional<Expr>();
+    }
+
+    Forall& func_type = strict_get<Forall>(func_type_.get());
+
+    if (func_type.params.size() != call.args.size()) {
+        return optional<Expr>();
+    }
+
+    Expr return_type = func_type.return_type;
+    for (size_t i = 0; i < func_type.params.size(); i++) {
+        optional<Expr> arg_kind = kind_infer(context, call.args[i]);
+        if (arg_kind) {
+            if (alpha_eq(func_type.params[i].type, arg_kind.get())) {
+                if (func_type.params[i].name) {
+                    subst(return_type, func_type.params[i].name.get(),
+                        call.args[i]);
+                }
+                continue;
+            } else {
+                return optional<Expr>();
+            }
+        }
+
+        optional<Expr> arg_type = type_infer(context, call.args[i]);
+        if (arg_type) {
+            if (alpha_eq(func_type.params[i].type, arg_type.get())) {
+                continue;
+            } else {
+                return optional<Expr>();
+            }
+        }
+
+        return optional<Expr>();
+    }
+
+    return optional<Expr>(return_type);
+}
+
+struct TypeInferVisitor : public static_visitor<optional<Expr>> {
+    Context& context;
+
+    TypeInferVisitor(Context& context) : context(context) {}
+
+    template <typename T>
+    optional<Expr> operator()(const T& expr) const {
+        return type_infer(context, expr);
+    }
+};
+
+optional<Expr> type_infer(Context& context, const Expr& expr) {
+    return apply_visitor(TypeInferVisitor(context), expr);
 }
 
 } /* namespace ast::expr */
