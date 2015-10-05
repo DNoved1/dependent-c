@@ -16,6 +16,7 @@ using boost::static_visitor;
 
 using context::Context;
 using context::ContextMarker;
+using util::gensym;
 using util::set_contains;
 using util::set_union;
 
@@ -136,7 +137,7 @@ void subst(Forall& forall, const string& name, const Expr& with) {
             }
 
             if (set_contains(with_free_vars, old_param_name)) {
-                string new_param_name; // TODO
+                string new_param_name = gensym(old_param_name, with_free_vars);
                 Expr replacement = Ident(new_param_name);
 
                 forall.params[i].name = new_param_name;
@@ -164,7 +165,7 @@ void subst(Lambda& lambda, const string& name, const Expr& with) {
         }
 
         if (set_contains(with_free_vars, old_param_name)) {
-            string new_param_name; // TODO
+            string new_param_name = gensym(old_param_name, with_free_vars);
             Expr replacement = Ident(new_param_name);
 
             lambda.params[i].name = new_param_name;

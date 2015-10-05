@@ -1,6 +1,7 @@
 #ifndef SYSTEM_F_C_UTIL_H
 #define SYSTEM_F_C_UTIL_H
 
+#include <boost/optional/optional.hpp>
 #include <cassert>
 #include <unordered_set>
 #include <vector>
@@ -47,6 +48,8 @@ namespace util {
             return data.get();
         }
     };
+
+    std::string gensym(std::string base, std::unordered_set<std::string> not_in);
 
 } /* namespace util */
 
