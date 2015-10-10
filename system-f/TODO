@@ -1,0 +1,66 @@
+Major
+=====
+* Locations (line, number, file) for ast nodes to assist in error messages.
+  * Possibly also derivation info for ast nodes that are artifically created
+    as a result of type checking (since it can require arbitrary type-level
+    computation to check equality). Would include info on the original
+    expression and possibly some of the computation steps, or if the number
+    gets to be too large simply include the number of steps to give an idea
+    of how far removed the derived expression is from the original.
+* Better equality testing.
+  * Test equality at different levels (term, type, and kind). Aka, have
+    Γ ⊢ M  = N  : T
+    Γ ⊢ T  = S  : K
+    Γ ⊢ K1 = K2 : sort
+  * Define equality up to beta, eta, and alpha conversions at the type
+    level, and up to alpha conversions at the kind and term level.
+* Tests.
+  * Random ast generation for quickcheck-like tests of properties such as
+    `pretty_print ∘ parse = id` (but not the reverse).
+* Error messages.
+
+Medium
+======
+
+Minor
+=====
+* Fix the plethora of performance bugs. The biggest offender is over-use of
+  values and value constructors; should eventually make more use of moves
+  and references.
+* Intern identifier strings.
+* UTF-8 parsing and pretty-printing.
+
+Features
+========
+* Generalized algebraic data and codata declarations.
+  * Allow manual specification of the layout by provision of a base type and a
+    coercion function from that base type to the declared type. For example:
+      data Option (A: Type) : Type {
+        None : Option(A);
+        Some : (A) -> Option(A);
+      }, layout : λ(A: Type) -> [bool, A] =
+        λ(A: Type, base: [bool, A]) =>
+          if base[0] then Some(base[1]) else None;
+    Here `λ(A: Type) -> [bool, A]` is the base type and has the same kind as
+    the type being defined, Option (`(Type) -> Type`). The coercion must then
+    universally quantify over all possible type instantiations of the GADT
+    being defined.
+    Of course, in this case the layout is exactly the same as the automatically
+    derived one. A more useful example would be a layout for List(A), with base
+    type `μX. Ref [A, X]` which uses a null pointer to represent the empty list
+    and a reference for cons, like you would in normal imperative programming.
+* Implicit, definable coercions ala C++, but with transitivity. Coercions
+  should be injective and unique to preserve coherence with this approach.
+* Weak existentials. Possibly strong, depending upon how much of a pain it is
+  to integrate into the theory (if it effectively requires full dependent
+  types, then it is probably not worth it).
+* A flag or metadata to indicate that all or one function (respectively) should
+  always be specialized on its type parameters whenever possible.
+* Type-level data declarations. Maybe. Convienent use requires either
+  undecidable type checking or totality checking, at which point you may as
+  well use dependent types. Further, due to the non-complete erasure of types
+  when compiling, the programmer needs to pay just as much attention to
+  performance of type-level functions as term-level ones.
+* Contexts ala Coq, to allow duplicated identifiers which can nonetheless be
+  distinquished properly. Will already have a basic form of this since types
+  and terms can share identifiers.
