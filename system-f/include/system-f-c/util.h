@@ -29,6 +29,20 @@ namespace util {
     }
 
     template <typename T>
+    void reverse(std::vector<T>& vector) {
+        if (vector.size() == 0) {
+            return;
+        }
+
+        size_t start_index = 0;
+        size_t end_index = vector.size() - 1;
+
+        while (start_index < end_index) {
+            std::swap(vector[start_index++], vector[end_index--]);
+        }
+    }
+
+    template <typename T>
     class Lazy {
         boost::optional<T> data;
         std::function<T()> thunk;
