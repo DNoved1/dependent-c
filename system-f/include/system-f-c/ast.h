@@ -31,6 +31,11 @@ namespace ast {
             , boost::recursive_wrapper<Call>
             > Expr;
 
+        bool is_ident(const Expr& expr);
+        bool is_type(const Expr& expr);
+        bool is_forall(const Expr& expr);
+        bool is_lambda(const Expr& expr);
+        bool is_call(const Expr& expr);
 
         std::unordered_set<std::string> free_vars(const Expr& expr);
         void subst(Expr& expr, const std::string& name, const Expr& with);

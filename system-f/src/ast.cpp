@@ -25,19 +25,36 @@ namespace ast {
 namespace expr {
 
 /***** Check an Expression's Constructor *************************************/
-struct IsForallVisitor : public static_visitor<bool> {
-    bool operator()(const Forall& forall) const {
+template <typename DesiredType>
+struct ExprTypeCheckVisitor : public static_visitor<bool> {
+    bool operator()(const DesiredType& expr) const {
         return true;
     }
 
-    template <typename T>
-    bool operator()(const T& expr) const {
+    template <typename OtherType>
+    bool operator()(const OtherType& expr) const {
         return false;
     }
 };
 
+bool is_ident(const Expr& expr) {
+    return apply_visitor(ExprTypeCheckVisitor<Ident>(), expr);
+}
+
+bool is_type(const Expr& expr) {
+    return apply_visitor(ExprTypeCheckVisitor<Type>(), expr);
+}
+
 bool is_forall(const Expr& expr) {
-    return apply_visitor(IsForallVisitor(), expr);
+    return apply_visitor(ExprTypeCheckVisitor<Forall>(), expr);
+}
+
+bool is_lambda(const Expr& expr) {
+    return apply_visitor(ExprTypeCheckVisitor<Lambda>(), expr);
+}
+
+bool is_call(const Expr& expr) {
+    return apply_visitor(ExprTypeCheckVisitor<Call>(), expr);
 }
 
 /***** Free Variable Set *****************************************************/
