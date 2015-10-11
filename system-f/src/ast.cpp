@@ -230,106 +230,6 @@ void subst(Expr& expr, const string& name, const Expr& with) {
     apply_visitor(SubstVisitor(expr, name, with), expr);
 }
 
-/***** Alpha Equality Testing ************************************************/
-bool alpha_eq(Ident& ident1, const Ident& ident2) {
-    return ident1.ident == ident2.ident;
-}
-
-bool alpha_eq(Type& type1, const Type& type2) {
-    return true;
-}
-
-bool alpha_eq(Forall& forall1, const Forall& forall2) {
-    if (forall1.params.size() != forall2.params.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < forall1.params.size(); i++) {
-        MaybeNamedType& param1 = forall1.params[i];
-        const MaybeNamedType& param2 = forall2.params[i];
-
-        if (!alpha_eq(param1.type, param2.type)) {
-            return false;
-        }
-
-        if (param1.name && param2.name
-                && param1.name.get() != param2.name.get()) {
-            Expr replacement = Ident(param2.name.get());
-
-            param1.name = param2.name.get();
-            for (size_t j = i + 1; j < forall1.params.size(); j++) {
-                subst(forall1.params[j].type, param1.name.get(), replacement);
-            }
-            subst(forall1.return_type, param1.name.get(), replacement);
-        }
-
-    }
-
-    return alpha_eq(forall1.return_type, forall2.return_type);
-}
-
-bool alpha_eq(Lambda& lambda1, const Lambda& lambda2) {
-    if (lambda1.params.size() != lambda2.params.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < lambda1.params.size(); i++) {
-        NamedType& param1 = lambda1.params[i];
-        const NamedType& param2 = lambda2.params[i];
-
-        if (!alpha_eq(param1.type, param2.type)) {
-            return false;
-        }
-
-        if (param1.name != param2.name) {
-            Expr replacement = Ident(param2.name);
-
-            param1.name = param2.name;
-            for (size_t j = i + 1; j < lambda1.params.size(); j++) {
-                subst(lambda1.params[j].type, param1.name, replacement);
-            }
-            subst(lambda1.body, param1.name, replacement);
-        }
-    }
-
-    return alpha_eq(lambda1.body, lambda2.body);
-}
-
-bool alpha_eq(Call& call1, const Call& call2) {
-    if (call1.args.size() != call2.args.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < call1.args.size(); i++) {
-        if (!alpha_eq(call1.args[i], call2.args[i])) {
-            return false;
-        }
-    }
-
-    return alpha_eq(call1.func, call2.func);
-}
-
-struct AlphaEqVisitor : public static_visitor<bool> {
-    template <typename T, typename S>
-    bool operator()(T& expr1, const S& expr2) const {
-        return false;
-    }
-
-    template <typename T>
-    bool operator()(T& expr1, const T& expr2) const {
-        return alpha_eq(expr1, expr2);
-    }
-};
-
-bool alpha_eq(Expr& expr1, const Expr& expr2) {
-    return apply_visitor(AlphaEqVisitor(), expr1, expr2);
-}
-
-bool alpha_eq(const Expr& expr1, const Expr& expr2) {
-    Expr expr1_copy = expr1;
-    return alpha_eq(expr1_copy, expr2);
-}
-
 /***** Pretty-Printing *******************************************************/
 ostream& operator<<(ostream& os, const Ident& ident) {
     return os << ident.ident;
@@ -530,7 +430,8 @@ optional<Expr> kind_infer(Context& context, const Call& call) {
 
     for (size_t i = 0; i < func_kind.params.size(); i++) {
         optional<Expr> arg_kind = kind_infer(context, call.args[i]);
-        if (!arg_kind || !alpha_eq(func_kind.params[i].type, arg_kind.get())) {
+        if (!arg_kind || !kind_equal(context,
+                func_kind.params[i].type, arg_kind.get())) {
             return optional<Expr>();
         }
     }
@@ -615,7 +516,7 @@ optional<Expr> type_infer(Context& context, const Call& call) {
     for (size_t i = 0; i < func_type.params.size(); i++) {
         optional<Expr> arg_kind = kind_infer(context, call.args[i]);
         if (arg_kind) {
-            if (alpha_eq(func_type.params[i].type, arg_kind.get())) {
+            if (kind_equal(context, func_type.params[i].type, arg_kind.get())) {
                 if (func_type.params[i].name) {
                     subst(return_type, func_type.params[i].name.get(),
                         call.args[i]);
@@ -628,7 +529,7 @@ optional<Expr> type_infer(Context& context, const Call& call) {
 
         optional<Expr> arg_type = type_infer(context, call.args[i]);
         if (arg_type) {
-            if (alpha_eq(func_type.params[i].type, arg_type.get())) {
+            if (type_equal(context, func_type.params[i].type, arg_type.get())) {
                 continue;
             } else {
                 return optional<Expr>();
@@ -654,6 +555,266 @@ struct TypeInferVisitor : public static_visitor<optional<Expr>> {
 
 optional<Expr> type_infer(Context& context, const Expr& expr) {
     return apply_visitor(TypeInferVisitor(context), expr);
+}
+
+/***** Type Equality *********************************************************/
+bool type_equal(Context& context, const Ident& type1, Ident& type2) {
+    return type1.ident == type2.ident;
+}
+
+bool type_equal(Context& context, const Type& type1, Type& type2) {
+    assert(!"'Type' is not a valid type.");
+}
+
+bool type_equal(Context& context, const Forall& type1, Forall& type2) {
+    if (type1.params.size() != type2.params.size()) return false;
+
+    for (size_t i = 0; i < type1.params.size(); i++) {
+        auto param1 = type1.params[i];
+        auto param2 = type2.params[i];
+
+        bool param1_kind = sort_infer(context, param1.type);
+        bool param2_kind = sort_infer(context, param2.type);
+        if (param1_kind != param2_kind) return false;
+
+        if (param1_kind) {
+            if (!kind_equal(context, param1.type, param2.type)) return false;
+        } else {
+            if (!type_equal(context, param1.type, param2.type)) return false;
+        }
+
+        if (param1.name && param2.name
+                && param1.name.get() != param2.name.get()) {
+            Expr replacement = Ident(param1.name.get());
+
+            param2.name = param1.name.get();
+            for (size_t j = i + 1; j < type2.params.size(); j++) {
+                subst(type2.params[j].type, param2.name.get(), replacement);
+            }
+            subst(type2.return_type, param2.name.get(), replacement);
+        }
+    }
+
+    return type_equal(context, type1.return_type, type2.return_type);
+}
+
+bool type_equal(Context& context, const Lambda& type1, Lambda& type2) {
+    if (type1.params.size() != type2.params.size()) return false;
+
+    for (size_t i = 0; i < type1.params.size(); i++) {
+        auto param1 = type1.params[i];
+        auto param2 = type2.params[i];
+
+        if (!kind_equal(context, param1.type, param2.type)) return false;
+
+        if (param1.name != param2.name) {
+            param2.name = param1.name;
+            // No need to subst in param types, since they should be kinds.
+            subst(type2.body, param2.name, Ident(param1.name));
+        }
+    }
+
+    return type_equal(context, type1.body, type2.body);
+}
+
+bool type_equal(Context& context, const Call& type1, Call& type2) {
+    if (type1.args.size() != type2.args.size()) return false;
+
+    for (size_t i = 0; i < type1.args.size(); i++) {
+        if (!type_equal(context, type1.args[i], type2.args[i])) return false;
+    }
+
+    return type_equal(context, type1.func, type2.func);
+}
+
+struct TypeEqualVisitor : public static_visitor<bool> {
+    Context& context;
+    TypeEqualVisitor(Context& context) : context(context) {}
+
+    template <typename T>
+    bool operator()(const T& type1, T& type2) const {
+        return type_equal(context, type1, type2);
+    }
+
+    template <typename T, typename S>
+    bool operator()(const T& type1, S& type2) const {
+        return false;
+    }
+};
+
+
+bool type_equal(Context& context, const Expr& type1, Expr& type2) {
+    return apply_visitor(TypeEqualVisitor(context), type1, type2);
+}
+
+bool type_equal(Context& context, const Expr& type1, const Expr& type2) {
+    const Expr reduced_type1 = type_compute(context, type1);
+    Expr reduced_type2 = type_compute(context, type2);
+
+    return type_equal(context, reduced_type1, reduced_type2);
+}
+
+/***** Kind Equality *********************************************************/
+bool kind_equal(Context& context, const Type& kind1, const Type& kind2) {
+    return true;
+}
+
+bool kind_equal(Context& context, const Forall& kind1, const Forall& kind2) {
+    if (kind1.params.size() != kind2.params.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < kind1.params.size(); i++) {
+        if (!kind_equal(context, kind1.params[i].type, kind2.params[i].type)) {
+            return false;
+        }
+    }
+
+    return kind_equal(context, kind1.return_type, kind2.return_type);
+}
+
+struct KindEqualVisitor : public static_visitor<bool> {
+    Context& context;
+    KindEqualVisitor(Context& context) : context(context) {}
+
+    // These are not valid since there is no kind-level abstraction.
+    bool operator()(const Ident& _1, const Ident& _2) const { return false; }
+    bool operator()(const Lambda& _1, const Lambda& _2) const { return false; }
+    bool operator()(const Call& _1, const Call& _2) const { return false; }
+
+    template <typename T>
+    bool operator()(const T& kind1, const T& kind2) const {
+        return kind_equal(context, kind1, kind2);
+    }
+
+    template <typename T, typename S>
+    bool operator()(const T& _1, const S& _2) const {
+        return false;
+    }
+};
+
+bool kind_equal(Context& context, const Expr& kind1, const Expr& kind2) {
+    return apply_visitor(KindEqualVisitor(context), kind1, kind2);
+}
+
+/***** Type-level computation ************************************************/
+
+// Types in System-Fω form a simply-typed lambda calculus themselves. As such,
+// if we assume that our types are well-kinded we can perform β and η
+// reductions without double checking that arguments are of the correct kind.
+// This in turn means we don't need to modify the context and can just use it
+// for looking up type definitions. Assuming that all identifiers are replaced
+// with their definitions already, the following set of rules define small-step
+// reductions for type-level computation.
+//
+//       ((a: k1, b: k2, ...) => T)(A, B, ...) ~> T[A/a, B/b, .../...]
+// β-red ---------------------------------------------------------
+//
+//
+//       (a: k1, b: k2, ...) => T(a, b, ...) ~> T
+// η-red ----------------------------------------
+//
+//
+//        (a: k1, b: k2, ...) => T ~> (a: k1, b: k2, ...) => S
+// λ-cong ----------------------------------------------------
+//                               T ~> S
+//
+//        (A: k1, ..., a: T1, ...) -> T ~> (A: k1, ..., a: S1, ...) -> S
+// ∀-cong --------------------------------------------------------------
+//                       T1 ~> S1  ... ~> ...  T ~> S
+//
+//           T(T1, T2, ...) ~> S(S1, S2, ...)
+// β-cong --------------------------------------
+//        T ~> S  T1 ~> S1  T2 ~> S2  ... ~> ...
+//
+// The β and η reduction rules are the usual ones for any lambda calculus. The
+// congruence rules on lambdas, forall types, and application simply state that
+// sub-components of types reduce, ie that we are going for normal form and not
+// weak-head normal form.
+
+Expr type_compute(Context& context, const Ident& type) {
+    optional<Expr> definition = context.lookup_type_definition(type.ident);
+
+    if (definition) {
+        return type_compute(context, definition.get());
+    } else {
+        return type;
+    }
+}
+
+Expr type_compute(Context& context, const Type& type) {
+    assert(!"'Type' is not a valid type.");
+}
+
+// ∀-cong
+Expr type_compute(Context& context, const Forall& type) {
+    Forall result = type;
+
+    for (size_t i = 0; i < type.params.size(); i++) {
+        if (sort_infer(context, type.params[i].type)) {
+            // No need to reduce since it is a kind.
+        } else {
+            result.params[i].type = type_compute(context, type.params[i].type);
+        }
+    }
+
+    result.return_type = type_compute(context, type.return_type);
+    return result;
+}
+
+// λ-cong and η-red
+Expr type_compute(Context& context, const Lambda& type) {
+    Lambda result = type;
+    result.body = type_compute(context, type.body);
+
+    if (!is_call(type.body)) return result;
+    const Call& inner_call = strict_get<Call>(type.body);
+    if (inner_call.args.size() != type.params.size()) return result;
+
+    for (size_t i = 0; i < type.params.size(); i++) {
+        if (!is_ident(inner_call.args[i])) return result;
+        const Ident& inner_call_arg = strict_get<Ident>(inner_call.args[i]);
+        if (inner_call_arg.ident != type.params[i].name) return result;
+    }
+
+    return type_compute(context, inner_call.func);
+}
+
+// β-cong and β-red
+Expr type_compute(Context& context, const Call& type) {
+    Expr result_func = type_compute(context, type.func);
+    vector<Expr> result_args;
+
+    for (auto arg : type.args) {
+        result_args.push_back(type_compute(context, arg));
+    }
+
+    if (is_lambda(result_func)) {
+        Lambda func = strict_get<Lambda>(result_func);
+        assert(func.params.size() == result_args.size());
+
+        for (size_t i = 0; i < func.params.size(); i++) {
+            subst(func.body, func.params[i].name, result_args[i]);
+        }
+
+        return type_compute(context, func.body);
+    } else {
+        return Call(result_func, result_args);
+    }
+}
+
+struct TypeComputeVisitor : public static_visitor<Expr> {
+    Context& context;
+    TypeComputeVisitor(Context& context) : context(context) {}
+
+    template <typename T>
+    Expr operator()(const T& type) const {
+        return type_compute(context, type);
+    }
+};
+
+Expr type_compute(Context& context, const Expr& type) {
+    return apply_visitor(TypeComputeVisitor(context), type);
 }
 
 } /* namespace ast::expr */

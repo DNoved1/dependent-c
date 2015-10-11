@@ -7,13 +7,6 @@ Major
     expression and possibly some of the computation steps, or if the number
     gets to be too large simply include the number of steps to give an idea
     of how far removed the derived expression is from the original.
-* Better equality testing.
-  * Test equality at different levels (term, type, and kind). Aka, have
-    Γ ⊢ M  = N  : T
-    Γ ⊢ T  = S  : K
-    Γ ⊢ K1 = K2 : sort
-  * Define equality up to beta, eta, and alpha conversions at the type
-    level, and up to alpha conversions at the kind and term level.
 * Tests.
   * Random ast generation for quickcheck-like tests of properties such as
     `pretty_print ∘ parse = id` (but not the reverse).

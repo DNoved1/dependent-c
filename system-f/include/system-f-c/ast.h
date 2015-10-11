@@ -37,25 +37,73 @@ namespace ast {
         bool is_lambda(const Expr& expr);
         bool is_call(const Expr& expr);
 
+        // TODO: need seperate functions for getting the free variables at the
+        // term and type level, since identifiers can be duplicated between them.
+        /*********************************************************************\
+         * Determine the set of free variables in an expression.             *
+        \*********************************************************************/
         std::unordered_set<std::string> free_vars(const Expr& expr);
+
+        // TODO: make this only substitute at the type level, since that's
+        // all that is needed.
+        /*********************************************************************\
+         * Substitute an expression for a identifier. Equivalent to the      *
+         * operation `expr[name := with]`.                                   *
+        \*********************************************************************/
         void subst(Expr& expr, const std::string& name, const Expr& with);
-        bool alpha_eq(const Expr& expr1, const Expr& expr2);
+
+        /*********************************************************************\
+         * Pretty-print an expression.                                       *
+        \*********************************************************************/
         std::ostream& operator<<(std::ostream& os, const Expr& expr);
 
-        /* Check if an expression is a valid kind. */
-        bool sort_infer(context::Context& context, const Expr& expr);
+        /*********************************************************************\
+         * Determine the sort of a kind. Equivalent to the judgement:        *
+         *   Γ ⊢ K : □                                                       *
+        \*********************************************************************/
+        bool sort_infer(context::Context& context, const Expr& kind);
 
-        /* Check if an expression is a valid type and, if so, determine its
-         * kind.
-         */
+        /*********************************************************************\
+         * Determine the kind of a type. Equivalent to the judgement:        *
+         *   Γ ⊢ T : K                                                       *
+        \*********************************************************************/
         boost::optional<Expr> kind_infer(context::Context& context,
-            const Expr& expr);
+            const Expr& type);
 
-        /* Check if an expression is a valid term and, if so, determine its
-         * type.
-         */
+        /*********************************************************************\
+         * Determine the type of a term. Equivalent to the judgement:        *
+         *   Γ ⊢ M : T                                                       *
+        \*********************************************************************/
         boost::optional<Expr> type_infer(context::Context& context,
-            const Expr& expr);
+            const Expr& term);
+
+        /*********************************************************************\
+         * Determine if two types are equal. Equivalent to the judgement:    *
+         *                                                                   *
+         *       Γ ⊢ T = S : K                                               *
+         *   ---------------------                                           *
+         *   Γ ⊢ T : K   Γ ⊢ S : K                                           *
+         *                                                                   *
+         * Checking this may require β, η, and α conversions.                *
+        \*********************************************************************/
+        bool type_equal(context::Context& context,
+            const Expr& type1, const Expr& type2);
+
+        /*********************************************************************\
+         * Determine if two kinds are equal. Equivalent to the judgement:    *
+         *                                                                   *
+         *       Γ ⊢ K1 = K2 : □                                             *
+         *   -----------------------                                         *
+         *   Γ ⊢ K1 : □   Γ ⊢ K2 : □                                         *
+        \*********************************************************************/
+        bool kind_equal(context::Context& context,
+            const Expr& kind1, const Expr& kind2);
+
+        /*********************************************************************\
+         * β and η reduce a type as much as possible. The type must be       *
+         * well-kinded.                                                      *
+        \*********************************************************************/
+        Expr type_compute(context::Context& context, const Expr& type);
     }
 
     struct MaybeNamedType {
@@ -84,9 +132,7 @@ namespace ast {
             Ident(std::string ident) : ident(ident) {}
         };
 
-        struct Type {
-            Type() {}
-        };
+        struct Type { };
 
         struct Forall {
             std::vector<MaybeNamedType> params;
